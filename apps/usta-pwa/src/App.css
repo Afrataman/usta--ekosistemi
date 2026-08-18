@@ -4,6 +4,7 @@ button { font:inherit; cursor:pointer; }
 button:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
 .app-shell { position:relative; width:min(100%,430px); min-height:100svh; margin:0 auto; padding:15px 20px 105px; overflow:hidden; color:var(--white); background:radial-gradient(circle at 90% 6%,rgba(0,117,206,.14),transparent 28%),linear-gradient(155deg,#020d18,#031727 58%,#02121f); }
 .status-bar { display:flex; justify-content:space-between; padding:2px 12px 22px; font-size:13px; }
+.offline-banner { position:sticky; z-index:12; top:5px; margin:-13px 0 10px; padding:8px 10px; border:1px solid #8b6415; border-radius:8px; color:#ffd16d; background:#382b0ceF; text-align:center; font-size:9px; }
 .status-bar span { letter-spacing:2px; }
 .brand-header,.brand,.page-header,.rewards-header,.section-row { display:flex; align-items:center; }
 .brand-header { justify-content:space-between; }

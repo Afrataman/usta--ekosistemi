@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0c3150"/><stop offset="1" stop-color="#031323"/></linearGradient><linearGradient id="tool" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#61f0d2"/><stop offset="1" stop-color="#1689ff"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/><circle cx="256" cy="256" r="176" fill="none" stroke="#245576" stroke-width="10"/>
+  <path d="M151 156l49 49-28 28-49-49c-23 8-49 2-67-16-21-21-25-52-13-77l42 42 38-38-42-42c25-12 56-8 77 13 18 18 24 44 16 67zm210 61l-66 66 60 60c15 15 15 40 0 55s-40 15-55 0l-60-60-65 65c-15 15-40 15-55 0s-15-40 0-55l181-181c-8-24-2-51 17-70 22-22 55-26 82-12l-46 46 33 33 46-46c14 27 10 60-12 82-19 19-46 25-70 17z" fill="url(#tool)"/>
+  <text x="256" y="465" text-anchor="middle" fill="#eaf7f3" font-family="Arial,sans-serif" font-size="42" font-weight="700">USTA</text>
+</svg>

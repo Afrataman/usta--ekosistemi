@@ -296,6 +296,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>('home')
   const [dashboard, setDashboard] = useState(fallbackDashboard)
   const [connected, setConnected] = useState(false)
+  const [online, setOnline] = useState(navigator.onLine)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -303,6 +304,12 @@ function App() {
       .then((data) => { setDashboard(data); setConnected(true) })
       .catch(() => setConnected(false))
     return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine)
+    window.addEventListener('online', update); window.addEventListener('offline', update)
+    return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update) }
   }, [])
 
   async function refreshDashboard() {
@@ -313,6 +320,7 @@ function App() {
 
   return <main className="app-shell">
     <div className="status-bar"><strong>9:41</strong><span>▮▮ ◔ ▰</span></div>
+    {!online && <div className="offline-banner">⌁ Çevrimdışısın — kayıtlı ekranlar açılabilir, puan işlemleri bağlantı gelince yapılır.</div>}
     {screen === 'home' && <Home go={setScreen} dashboard={dashboard} connected={connected} />}
     {screen === 'scan' && <Scanner back={() => setScreen('home')} craftsmanId={dashboard.craftsmanId} onRedeemed={refreshDashboard} />}
     {screen === 'rewards' && <Rewards balance={dashboard.balance} craftsmanId={dashboard.craftsmanId} onBalanceChanged={refreshDashboard} />}
