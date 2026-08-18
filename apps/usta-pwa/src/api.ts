@@ -32,6 +32,31 @@ export type RedeemResult = {
   redeemedAtUtc: string
 }
 
+export type WalletMovement = {
+  id: string
+  amount: number
+  transactionType: number
+  description: string
+  createdAtUtc: string
+}
+
+export type Wallet = {
+  id: string
+  fullName: string
+  level: number
+  balance: number
+  movements: WalletMovement[]
+}
+
+export async function getWallet(craftsmanId: string, signal?: AbortSignal): Promise<Wallet> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/wallet`, { signal })
+  if (!response.ok) {
+    throw new Error('Puan cüzdanı alınamadı.')
+  }
+
+  return response.json() as Promise<Wallet>
+}
+
 export async function redeemProductCode(craftsmanId: string, code: string): Promise<RedeemResult> {
   const response = await fetch(`${apiBaseUrl}/api/product-codes/redeem`, {
     method: 'POST',

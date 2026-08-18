@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { getDemoDashboard, redeemProductCode, type Dashboard } from './api'
+import { getDemoDashboard, getWallet, redeemProductCode, type Dashboard, type Wallet as WalletData } from './api'
 import './App.css'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'profile'
@@ -60,7 +60,7 @@ function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dash
 
       <h2 className="block-title">Hızlı İşlemler</h2>
       <div className="quick-grid">
-        <button type="button"><span>◴</span>Puan Geçmişi</button><button type="button"><span>▰</span>Kuponlar</button>
+        <button onClick={() => go('wallet')} type="button"><span>◴</span>Puan Geçmişi</button><button type="button"><span>▰</span>Kuponlar</button>
         <button type="button"><span>◇</span>Kampanyalar</button><button type="button"><span>♧</span>Destek</button>
       </div>
 
@@ -133,6 +133,38 @@ function Rewards({ balance }: { balance: number }) {
   )
 }
 
+function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) => void }) {
+  const [wallet, setWallet] = useState<WalletData | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    if (!dashboard.craftsmanId) return
+    const controller = new AbortController()
+    getWallet(dashboard.craftsmanId, controller.signal).then(setWallet).catch(() => setError(true))
+    return () => controller.abort()
+  }, [dashboard.craftsmanId, dashboard.balance])
+
+  const balance = wallet?.balance ?? dashboard.balance
+  const movements = wallet?.movements ?? dashboard.movements.map((movement, index) => ({ ...movement, id: String(index), transactionType: 0 }))
+
+  return <>
+    <header className="wallet-header"><div><span>PUAN CÜZDANI</span><h1>{dashboard.fullName}</h1></div><b>{levelNames[dashboard.level] ?? dashboard.level}</b></header>
+    <section className="wallet-balance"><span>Toplam puanın</span><strong>{numberFormatter.format(balance)} <small>puan</small></strong><p>Bu puanla alabileceğin ödüllerin değeri: <b>{numberFormatter.format(Math.floor(balance / 20))} TL'ye kadar</b></p></section>
+    <div className="wallet-actions"><button onClick={() => go('scan')} type="button"><span>▦</span>Puan Kazan</button><button onClick={() => go('rewards')} type="button"><span>♙</span>Ödüllere Git</button></div>
+    <div className="wallet-title"><h2>Puan hareketleri</h2><button type="button">Tümü</button></div>
+    {error && <p className="wallet-error">Bağlantı kurulamadı; son bilinen hareketler gösteriliyor.</p>}
+    <section className="wallet-movements">
+      {movements.length === 0 && <p className="empty-wallet">Henüz puan hareketi yok.</p>}
+      {movements.map((movement) => <article key={movement.id}>
+        <span className={movement.amount < 0 ? 'movement-badge spent' : 'movement-badge'}>{movement.amount < 0 ? '↙' : '↗'}</span>
+        <div><strong>{movement.description}</strong><time>{dateFormatter.format(new Date(movement.createdAtUtc))}</time></div>
+        <b className={movement.amount < 0 ? 'negative' : ''}>{movement.amount > 0 ? '+' : ''}{numberFormatter.format(movement.amount)}</b>
+      </article>)}
+    </section>
+    <div className="wallet-info">ⓘ <span>Puanlar nakit değildir ve banka hesabına çekilemez. Yalnızca Usta Kulübü ödüllerinde kullanılır.</span></div>
+  </>
+}
+
 function Placeholder({ title }: { title: string }) {
   return <section className="placeholder"><span>⚒</span><h1>{title}</h1><p>Bu ekran sıradaki geliştirme adımında gerçek verilerle hazırlanacak.</p></section>
 }
@@ -161,7 +193,7 @@ function App() {
     {screen === 'home' && <Home go={setScreen} dashboard={dashboard} connected={connected} />}
     {screen === 'scan' && <Scanner back={() => setScreen('home')} craftsmanId={dashboard.craftsmanId} onRedeemed={refreshDashboard} />}
     {screen === 'rewards' && <Rewards balance={dashboard.balance} />}
-    {screen === 'wallet' && <Placeholder title="Puan Cüzdanı" />}
+    {screen === 'wallet' && <Wallet dashboard={dashboard} go={setScreen} />}
     {screen === 'profile' && <Placeholder title="Profilim" />}
     <BottomNav screen={screen} setScreen={setScreen} />
   </main>
