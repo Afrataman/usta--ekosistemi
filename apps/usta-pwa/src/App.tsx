@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { getDemoDashboard, getRewards, getWallet, redeemProductCode, type Dashboard, type Reward, type Wallet as WalletData } from './api'
+import { getDemoDashboard, getRewards, getWallet, redeemProductCode, redeemReward, type Dashboard, type Reward, type RewardRedemptionResult, type Wallet as WalletData } from './api'
 import './App.css'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'profile'
@@ -119,10 +119,15 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   )
 }
 
-function Rewards({ balance }: { balance: number }) {
+function Rewards({ balance, craftsmanId, onBalanceChanged }: { balance: number; craftsmanId: string; onBalanceChanged: () => Promise<void> }) {
   const [filter, setFilter] = useState<'all' | Reward['deliveryType']>('all')
   const [catalog, setCatalog] = useState(fallbackRewards)
   const [connected, setConnected] = useState(false)
+  const [catalogVersion, setCatalogVersion] = useState(0)
+  const [selectedReward, setSelectedReward] = useState<Reward | null>(null)
+  const [redemption, setRedemption] = useState<RewardRedemptionResult | null>(null)
+  const [redemptionError, setRedemptionError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -133,7 +138,24 @@ function Rewards({ balance }: { balance: number }) {
         setCatalog(filter === 'all' ? fallbackRewards : fallbackRewards.filter((item) => item.deliveryType === filter))
       })
     return () => controller.abort()
-  }, [filter])
+  }, [filter, catalogVersion])
+
+  async function confirmRedemption() {
+    if (!selectedReward || !craftsmanId) return
+    setSubmitting(true)
+    setRedemptionError('')
+    try {
+      const response = await redeemReward(selectedReward.id, craftsmanId)
+      setRedemption(response)
+      setSelectedReward(null)
+      setCatalogVersion((version) => version + 1)
+      await onBalanceChanged()
+    } catch (error) {
+      setRedemptionError(error instanceof Error ? error.message : 'Ödül alınamadı.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <>
@@ -142,10 +164,16 @@ function Rewards({ balance }: { balance: number }) {
       <div className={connected ? 'catalog-source connected' : 'catalog-source'}>{connected ? 'Canlı katalog' : 'Örnek katalog'}</div>
       <div className="rewards-grid">
         {catalog.map((reward) => <article className="reward-product" key={reward.id} title={reward.description}>
-          {reward.deliveryType === 'DealerPickup' && <span className="delivery">Bayiden Teslim</span>}<div className="product-art">{rewardArt[reward.imageKey] ?? '🎁'}</div><h2>{reward.name}</h2><p>{numberFormatter.format(reward.pointCost)} puan</p><button disabled={!reward.isAvailable || balance < reward.pointCost} type="button">{!reward.isAvailable ? 'Stokta Yok' : balance < reward.pointCost ? 'Puan Yetersiz' : reward.deliveryType === 'Digital' ? 'İncele' : 'Ödülü Al'}</button>
+          {reward.deliveryType === 'DealerPickup' && <span className="delivery">Bayiden Teslim</span>}<div className="product-art">{rewardArt[reward.imageKey] ?? '🎁'}</div><h2>{reward.name}</h2><p>{numberFormatter.format(reward.pointCost)} puan</p><button onClick={() => { setSelectedReward(reward); setRedemption(null); setRedemptionError('') }} disabled={!reward.isAvailable || balance < reward.pointCost || !craftsmanId} type="button">{!reward.isAvailable ? 'Stokta Yok' : balance < reward.pointCost ? 'Puan Yetersiz' : reward.deliveryType === 'Digital' ? 'İncele' : 'Ödülü Al'}</button>
         </article>)}
       </div>
       <div className="points-note">ⓘ <span>Puanlar nakit değildir; yalnızca program ödüllerinde kullanılır.</span></div>
+      {selectedReward && <div className="reward-dialog-backdrop"><section className="reward-dialog" role="dialog" aria-modal="true" aria-labelledby="reward-dialog-title">
+        <button className="dialog-close" onClick={() => setSelectedReward(null)} type="button" aria-label="Kapat">×</button><div className="dialog-art">{rewardArt[selectedReward.imageKey] ?? '🎁'}</div>
+        <h2 id="reward-dialog-title">{selectedReward.name}</h2><p>{selectedReward.description}</p><strong>{numberFormatter.format(selectedReward.pointCost)} puan kullanılacak</strong>
+        {redemptionError && <span className="dialog-error">{redemptionError}</span>}<button className="dialog-confirm" onClick={confirmRedemption} disabled={submitting} type="button">{submitting ? 'İşlem yapılıyor…' : 'Onayla ve Ödülü Al'}</button><button className="dialog-cancel" onClick={() => setSelectedReward(null)} type="button">Vazgeç</button>
+      </section></div>}
+      {redemption && <section className="redemption-success"><span>✓</span><div><strong>Ödülün hazır!</strong><p>{redemption.reward}</p><code>{redemption.fulfillmentCode}</code><small>{redemption.deliveryType === 'Digital' ? 'Dijital kodunu yukarıda görebilirsin.' : 'Bu kodu bayide görevliye göster.'}</small></div><button onClick={() => setRedemption(null)} type="button">×</button></section>}
     </>
   )
 }
@@ -209,7 +237,7 @@ function App() {
     <div className="status-bar"><strong>9:41</strong><span>▮▮ ◔ ▰</span></div>
     {screen === 'home' && <Home go={setScreen} dashboard={dashboard} connected={connected} />}
     {screen === 'scan' && <Scanner back={() => setScreen('home')} craftsmanId={dashboard.craftsmanId} onRedeemed={refreshDashboard} />}
-    {screen === 'rewards' && <Rewards balance={dashboard.balance} />}
+    {screen === 'rewards' && <Rewards balance={dashboard.balance} craftsmanId={dashboard.craftsmanId} onBalanceChanged={refreshDashboard} />}
     {screen === 'wallet' && <Wallet dashboard={dashboard} go={setScreen} />}
     {screen === 'profile' && <Placeholder title="Profilim" />}
     <BottomNav screen={screen} setScreen={setScreen} />

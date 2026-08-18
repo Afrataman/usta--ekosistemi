@@ -69,6 +69,29 @@ export async function getRewards(deliveryType?: Reward['deliveryType'], signal?:
   return response.json() as Promise<Reward[]>
 }
 
+export type RewardRedemptionResult = {
+  id: string
+  reward: string
+  pointsSpent: number
+  fulfillmentCode: string
+  deliveryType: Reward['deliveryType']
+  balance: number
+}
+
+export async function redeemReward(rewardId: string, craftsmanId: string): Promise<RewardRedemptionResult> {
+  const response = await fetch(`${apiBaseUrl}/api/rewards/${rewardId}/redeem`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ craftsmanId }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null
+    throw new Error(body?.message ?? 'Ödül alınamadı.')
+  }
+
+  return response.json() as Promise<RewardRedemptionResult>
+}
+
 export async function getWallet(craftsmanId: string, signal?: AbortSignal): Promise<Wallet> {
   const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/wallet`, { signal })
   if (!response.ok) {

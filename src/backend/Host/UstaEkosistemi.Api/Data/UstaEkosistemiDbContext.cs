@@ -11,6 +11,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<ProductCode> ProductCodes => Set<ProductCode>();
     public DbSet<PointLedgerEntry> PointLedgerEntries => Set<PointLedgerEntry>();
     public DbSet<Reward> Rewards => Set<Reward>();
+    public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -70,6 +71,18 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.Property(x => x.DeliveryType).HasConversion<string>().HasMaxLength(20);
             entity.Property(x => x.ImageKey).HasMaxLength(50).IsRequired();
             entity.HasIndex(x => new { x.IsActive, x.DisplayOrder });
+        });
+
+        modelBuilder.Entity<RewardRedemption>(entity =>
+        {
+            entity.ToTable("RewardRedemptions", table => table.HasCheckConstraint("CK_RewardRedemptions_PointsSpent", "[PointsSpent] > 0"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.FulfillmentCode).HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => x.FulfillmentCode).IsUnique();
+            entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc });
+            entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Reward).WithMany().HasForeignKey(x => x.RewardId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
