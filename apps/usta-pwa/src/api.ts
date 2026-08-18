@@ -90,6 +90,36 @@ export type RewardRedemption = {
   fulfilledAtUtc: string | null
 }
 
+export type CraftsmanProfile = {
+  id: string
+  fullName: string
+  phoneNumber: string
+  city: string | null
+  level: string
+  campaignNotificationsEnabled: boolean
+  smsNotificationsEnabled: boolean
+  createdAtUtc: string
+}
+
+export type UpdateCraftsmanProfile = Pick<CraftsmanProfile,
+  'fullName' | 'city' | 'campaignNotificationsEnabled' | 'smsNotificationsEnabled'>
+
+export async function getCraftsmanProfile(craftsmanId: string, signal?: AbortSignal): Promise<CraftsmanProfile> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, { signal })
+  if (!response.ok) throw new Error('Profil alınamadı.')
+  return response.json() as Promise<CraftsmanProfile>
+}
+
+export async function updateCraftsmanProfile(craftsmanId: string, profile: UpdateCraftsmanProfile): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: string; message?: string } | null
+    throw new Error(body?.detail ?? body?.message ?? 'Profil kaydedilemedi.')
+  }
+}
+
 export async function getRewardRedemptions(craftsmanId: string, signal?: AbortSignal): Promise<RewardRedemption[]> {
   const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/reward-redemptions`, { signal })
   if (!response.ok) {

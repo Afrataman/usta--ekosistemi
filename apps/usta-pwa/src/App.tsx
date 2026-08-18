@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { getDemoDashboard, getRewardRedemptions, getRewards, getWallet, redeemProductCode, redeemReward, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type Wallet as WalletData } from './api'
+import { getCraftsmanProfile, getDemoDashboard, getRewardRedemptions, getRewards, getWallet, redeemProductCode, redeemReward, updateCraftsmanProfile, type CraftsmanProfile, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type Wallet as WalletData } from './api'
 import './App.css'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'profile'
@@ -246,8 +246,36 @@ function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void 
   </>
 }
 
-function Placeholder({ title }: { title: string }) {
-  return <section className="placeholder"><span>⚒</span><h1>{title}</h1><p>Bu ekran sıradaki geliştirme adımında gerçek verilerle hazırlanacak.</p></section>
+function Profile({ craftsmanId, onUpdated }: { craftsmanId: string; onUpdated: () => Promise<void> }) {
+  const [profile, setProfile] = useState<CraftsmanProfile | null>(null)
+  const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!craftsmanId) return
+    const controller = new AbortController()
+    getCraftsmanProfile(craftsmanId, controller.signal).then(setProfile).catch(() => setMessage({ kind: 'error', text: 'Profil yüklenemedi. Backend bağlantısını kontrol edin.' }))
+    return () => controller.abort()
+  }, [craftsmanId])
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!profile) return
+    setSaving(true); setMessage(null)
+    try {
+      await updateCraftsmanProfile(craftsmanId, profile); await onUpdated()
+      setMessage({ kind: 'success', text: 'Profil bilgilerin kaydedildi.' })
+    } catch (error) {
+      setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Profil kaydedilemedi.' })
+    } finally { setSaving(false) }
+  }
+
+  if (!profile) return <div className="profile-loading">{message?.text ?? 'Profil yükleniyor…'}</div>
+  const maskedPhone = `${profile.phoneNumber.slice(0, 4)} *** ** ${profile.phoneNumber.slice(-2)}`
+  return <><header className="profile-header"><div className="profile-avatar">AU</div><div><h1>{profile.fullName}</h1><span>{levelNames[profile.level] ?? profile.level} Seviye</span></div></header>
+    <form className="profile-form" onSubmit={save}><section><h2>Kişisel bilgiler</h2><label>Ad soyad<input value={profile.fullName} onChange={(event) => setProfile({ ...profile, fullName: event.target.value })} minLength={3} maxLength={120} required /></label><label>Şehir<input value={profile.city ?? ''} onChange={(event) => setProfile({ ...profile, city: event.target.value })} maxLength={80} placeholder="Şehir seçilmedi" /></label><label>Telefon numarası<div className="locked-field"><span>{maskedPhone}</span><b>Doğrulandı</b></div><small>Telefon değişikliği SMS doğrulaması gerektirir.</small></label></section>
+      <section><h2>Bildirim tercihleri</h2><label className="toggle-row"><div><strong>Kampanya bildirimleri</strong><small>Yeni kampanya ve fırsatları uygulamada göster.</small></div><input type="checkbox" checked={profile.campaignNotificationsEnabled} onChange={(event) => setProfile({ ...profile, campaignNotificationsEnabled: event.target.checked })} /><i /></label><label className="toggle-row"><div><strong>SMS bildirimleri</strong><small>Önemli puan ve kupon bilgilerini SMS ile al.</small></div><input type="checkbox" checked={profile.smsNotificationsEnabled} onChange={(event) => setProfile({ ...profile, smsNotificationsEnabled: event.target.checked })} /><i /></label></section>
+      <div className="profile-meta">Üyelik tarihi: {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long' }).format(new Date(profile.createdAtUtc))}</div>{message && <p className={`profile-message ${message.kind}`}>{message.text}</p>}<button className="profile-save" disabled={saving} type="submit">{saving ? 'Kaydediliyor…' : 'Değişiklikleri Kaydet'}</button></form></>
 }
 
 function App() {
@@ -276,7 +304,7 @@ function App() {
     {screen === 'rewards' && <Rewards balance={dashboard.balance} craftsmanId={dashboard.craftsmanId} onBalanceChanged={refreshDashboard} />}
     {screen === 'wallet' && <Wallet dashboard={dashboard} go={setScreen} />}
     {screen === 'coupons' && <Coupons craftsmanId={dashboard.craftsmanId} back={() => setScreen('home')} />}
-    {screen === 'profile' && <Placeholder title="Profilim" />}
+    {screen === 'profile' && <Profile craftsmanId={dashboard.craftsmanId} onUpdated={refreshDashboard} />}
     <BottomNav screen={screen} setScreen={setScreen} />
   </main>
 }

@@ -56,6 +56,67 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : Con
 
         return Ok(new { craftsman.Id, craftsman.FullName, craftsman.Level, balance, movements });
     }
+
+    [HttpGet("{id:guid}/profile")]
+    public async Task<IActionResult> GetProfile(Guid id, CancellationToken cancellationToken)
+    {
+        var profile = await dbContext.Craftsmen.AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new
+            {
+                x.Id,
+                x.FullName,
+                x.PhoneNumber,
+                x.City,
+                level = x.Level.ToString(),
+                x.CampaignNotificationsEnabled,
+                x.SmsNotificationsEnabled,
+                x.CreatedAtUtc
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return profile is null ? NotFound(new { message = "Usta bulunamadı." }) : Ok(profile);
+    }
+
+    [HttpPut("{id:guid}/profile")]
+    public async Task<IActionResult> UpdateProfile(Guid id, UpdateCraftsmanProfileRequest request, CancellationToken cancellationToken)
+    {
+        var craftsman = await dbContext.Craftsmen.SingleOrDefaultAsync(x => x.Id == id && x.IsActive, cancellationToken);
+        if (craftsman is null)
+        {
+            return NotFound(new { message = "Aktif usta bulunamadı." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.FullName) || request.FullName.Trim().Length is < 3 or > 120)
+        {
+            return ValidationProblem("Ad soyad 3 ile 120 karakter arasında olmalıdır.");
+        }
+
+        if (request.City?.Trim().Length > 80)
+        {
+            return ValidationProblem("Şehir 80 karakterden uzun olamaz.");
+        }
+
+        craftsman.FullName = request.FullName.Trim();
+        craftsman.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
+        craftsman.CampaignNotificationsEnabled = request.CampaignNotificationsEnabled;
+        craftsman.SmsNotificationsEnabled = request.SmsNotificationsEnabled;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            craftsman.Id,
+            craftsman.FullName,
+            craftsman.City,
+            craftsman.CampaignNotificationsEnabled,
+            craftsman.SmsNotificationsEnabled
+        });
+    }
 }
 
 public sealed record CreateCraftsmanRequest(string PhoneNumber, string FullName, string? City);
+public sealed record UpdateCraftsmanProfileRequest(
+    string FullName,
+    string? City,
+    bool CampaignNotificationsEnabled,
+    bool SmsNotificationsEnabled);
