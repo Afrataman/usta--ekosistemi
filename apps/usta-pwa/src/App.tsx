@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { getDemoDashboard, getRewards, getWallet, redeemProductCode, redeemReward, type Dashboard, type Reward, type RewardRedemptionResult, type Wallet as WalletData } from './api'
+import { getDemoDashboard, getRewardRedemptions, getRewards, getWallet, redeemProductCode, redeemReward, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type Wallet as WalletData } from './api'
 import './App.css'
 
-type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'profile'
+type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'profile'
 
 const fallbackRewards: Reward[] = [
   { id: '1', name: 'Takım Çantası', description: '', pointCost: 2_500, imageKey: 'tool-bag', deliveryType: 'DealerPickup', stockQuantity: 40, isAvailable: true },
@@ -61,7 +61,7 @@ function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dash
 
       <h2 className="block-title">Hızlı İşlemler</h2>
       <div className="quick-grid">
-        <button onClick={() => go('wallet')} type="button"><span>◴</span>Puan Geçmişi</button><button type="button"><span>▰</span>Kuponlar</button>
+        <button onClick={() => go('wallet')} type="button"><span>◴</span>Puan Geçmişi</button><button onClick={() => go('coupons')} type="button"><span>▰</span>Kuponlar</button>
         <button type="button"><span>◇</span>Kampanyalar</button><button type="button"><span>♧</span>Destek</button>
       </div>
 
@@ -210,6 +210,42 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
   </>
 }
 
+function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void }) {
+  const [items, setItems] = useState<RewardRedemption[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [copiedId, setCopiedId] = useState('')
+
+  useEffect(() => {
+    if (!craftsmanId) { setLoading(false); setError('Backend bağlantısı kurulamadı.'); return }
+    const controller = new AbortController()
+    getRewardRedemptions(craftsmanId, controller.signal)
+      .then(setItems)
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Kuponlar alınamadı.'))
+      .finally(() => setLoading(false))
+    return () => controller.abort()
+  }, [craftsmanId])
+
+  async function copyCode(item: RewardRedemption) {
+    await navigator.clipboard.writeText(item.fulfillmentCode)
+    setCopiedId(item.id)
+    window.setTimeout(() => setCopiedId(''), 1600)
+  }
+
+  return <>
+    <header className="page-header coupons-header"><button onClick={back} type="button">‹</button><h1>Kuponlarım</h1><span>{items.length}</span></header>
+    <div className="coupon-tabs"><button className="selected" type="button">Tümü</button><button type="button">Aktif</button><button type="button">Kullanılmış</button></div>
+    {loading && <div className="coupon-state">Kuponlar yükleniyor…</div>}
+    {error && <div className="coupon-state error">{error}</div>}
+    {!loading && !error && items.length === 0 && <div className="coupon-empty"><span>▰</span><h2>Henüz kuponun yok</h2><p>Ödül kataloğundan bir ödül aldığında teslim kodun burada saklanır.</p></div>}
+    <section className="coupon-list">{items.map((item) => <article className={item.status === 'Created' ? 'coupon-card' : 'coupon-card inactive'} key={item.id}>
+      <div className="coupon-art">{rewardArt[item.imageKey] ?? '🎁'}</div><div className="coupon-main"><div className="coupon-name"><h2>{item.rewardName}</h2><span>{item.status === 'Created' ? 'Aktif' : item.status === 'Fulfilled' ? 'Kullanıldı' : 'İptal'}</span></div><p>{item.deliveryType === 'Digital' ? 'Dijital ödül kodu' : 'Bayiden teslim kodu'} · {numberFormatter.format(item.pointsSpent)} puan</p><code>{item.fulfillmentCode}</code><small>Oluşturulma: {dateFormatter.format(new Date(item.createdAtUtc))}</small></div>
+      <button onClick={() => copyCode(item)} disabled={item.status !== 'Created'} type="button">{copiedId === item.id ? 'Kopyalandı' : 'Kopyala'}</button>
+    </article>)}</section>
+    <div className="wallet-info">ⓘ <span>Bayiden teslim ödüllerinde bu kodu bayi görevlisine göster. Kodu tanımadığın kişilerle paylaşma.</span></div>
+  </>
+}
+
 function Placeholder({ title }: { title: string }) {
   return <section className="placeholder"><span>⚒</span><h1>{title}</h1><p>Bu ekran sıradaki geliştirme adımında gerçek verilerle hazırlanacak.</p></section>
 }
@@ -239,6 +275,7 @@ function App() {
     {screen === 'scan' && <Scanner back={() => setScreen('home')} craftsmanId={dashboard.craftsmanId} onRedeemed={refreshDashboard} />}
     {screen === 'rewards' && <Rewards balance={dashboard.balance} craftsmanId={dashboard.craftsmanId} onBalanceChanged={refreshDashboard} />}
     {screen === 'wallet' && <Wallet dashboard={dashboard} go={setScreen} />}
+    {screen === 'coupons' && <Coupons craftsmanId={dashboard.craftsmanId} back={() => setScreen('home')} />}
     {screen === 'profile' && <Placeholder title="Profilim" />}
     <BottomNav screen={screen} setScreen={setScreen} />
   </main>

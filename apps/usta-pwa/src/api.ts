@@ -78,6 +78,27 @@ export type RewardRedemptionResult = {
   balance: number
 }
 
+export type RewardRedemption = {
+  id: string
+  rewardName: string
+  imageKey: string
+  deliveryType: Reward['deliveryType']
+  status: 'Created' | 'Fulfilled' | 'Cancelled'
+  pointsSpent: number
+  fulfillmentCode: string
+  createdAtUtc: string
+  fulfilledAtUtc: string | null
+}
+
+export async function getRewardRedemptions(craftsmanId: string, signal?: AbortSignal): Promise<RewardRedemption[]> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/reward-redemptions`, { signal })
+  if (!response.ok) {
+    throw new Error('Kuponlar alınamadı.')
+  }
+
+  return response.json() as Promise<RewardRedemption[]>
+}
+
 export async function redeemReward(rewardId: string, craftsmanId: string): Promise<RewardRedemptionResult> {
   const response = await fetch(`${apiBaseUrl}/api/rewards/${rewardId}/redeem`, {
     method: 'POST',
