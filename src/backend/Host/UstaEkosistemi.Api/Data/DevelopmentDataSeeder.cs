@@ -71,6 +71,14 @@ public static class DevelopmentDataSeeder
                 CreateReward("55555555-5555-5555-5555-555555555554", "Dijital Hediye Kodu", "Anında teslim edilen dijital alışveriş kodu", 1_500, RewardDeliveryType.Digital, "digital-gift", null, 4));
         }
 
+        if (!await dbContext.Campaigns.AnyAsync(cancellationToken))
+        {
+            var now = DateTimeOffset.UtcNow;
+            dbContext.Campaigns.AddRange(
+                new Campaign { Id = Guid.Parse("66666666-6666-6666-6666-666666666661"), Title = "Ağustos Çifte Puan", Summary = "Seçili ürün kodlarında puanlar iki kat değerinde.", PointMultiplier = 2, StartsAtUtc = now.AddDays(-5), EndsAtUtc = now.AddDays(25), DisplayOrder = 1 },
+                new Campaign { Id = Guid.Parse("66666666-6666-6666-6666-666666666662"), Title = "İlk Ödül Fırsatı", Summary = "İlk ödülünü alan ustalara özel avantajlı katalog.", PointMultiplier = 1, StartsAtUtc = now.AddDays(-5), EndsAtUtc = now.AddDays(55), DisplayOrder = 2 });
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 

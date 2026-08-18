@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { getCraftsmanProfile, getDemoDashboard, getRewardRedemptions, getRewards, getWallet, redeemProductCode, redeemReward, updateCraftsmanProfile, type CraftsmanProfile, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type Wallet as WalletData } from './api'
+import { createSupportRequest, getCampaigns, getCraftsmanProfile, getDemoDashboard, getRewardRedemptions, getRewards, getSupportRequests, getWallet, redeemProductCode, redeemReward, updateCraftsmanProfile, type Campaign, type CraftsmanProfile, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
 import './App.css'
 
-type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'profile'
+type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'campaigns' | 'support' | 'profile'
 
 const fallbackRewards: Reward[] = [
   { id: '1', name: 'Takım Çantası', description: '', pointCost: 2_500, imageKey: 'tool-bag', deliveryType: 'DealerPickup', stockQuantity: 40, isAvailable: true },
@@ -62,7 +62,7 @@ function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dash
       <h2 className="block-title">Hızlı İşlemler</h2>
       <div className="quick-grid">
         <button onClick={() => go('wallet')} type="button"><span>◴</span>Puan Geçmişi</button><button onClick={() => go('coupons')} type="button"><span>▰</span>Kuponlar</button>
-        <button type="button"><span>◇</span>Kampanyalar</button><button type="button"><span>♧</span>Destek</button>
+        <button onClick={() => go('campaigns')} type="button"><span>◇</span>Kampanyalar</button><button onClick={() => go('support')} type="button"><span>♧</span>Destek</button>
       </div>
 
       <div className="section-row"><h2>Son Puan Hareketleri</h2><button type="button">Tümü ›</button></div>
@@ -278,6 +278,20 @@ function Profile({ craftsmanId, onUpdated }: { craftsmanId: string; onUpdated: (
       <div className="profile-meta">Üyelik tarihi: {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long' }).format(new Date(profile.createdAtUtc))}</div>{message && <p className={`profile-message ${message.kind}`}>{message.text}</p>}<button className="profile-save" disabled={saving} type="submit">{saving ? 'Kaydediliyor…' : 'Değişiklikleri Kaydet'}</button></form></>
 }
 
+function Campaigns({ back }: { back: () => void }) {
+  const [items, setItems] = useState<Campaign[]>([]); const [error, setError] = useState('')
+  useEffect(() => { const controller = new AbortController(); getCampaigns(controller.signal).then(setItems).catch(() => setError('Kampanyalar yüklenemedi.')); return () => controller.abort() }, [])
+  return <><header className="page-header simple-header"><button onClick={back} type="button">‹</button><h1>Kampanyalar</h1><span>◇</span></header>{error && <p className="screen-error">{error}</p>}<section className="campaign-list">{items.map((item) => <article key={item.id}><div className="campaign-badge">{item.pointMultiplier > 1 ? `${item.pointMultiplier}X` : '★'}</div><div><span>AKTİF KAMPANYA</span><h2>{item.title}</h2><p>{item.summary}</p><small>{new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(item.endsAtUtc))} tarihine kadar</small></div></article>)}</section>{!error && items.length === 0 && <div className="coupon-state">Aktif kampanya bulunmuyor.</div>}</>
+}
+
+function Support({ craftsmanId, back }: { craftsmanId: string; back: () => void }) {
+  const [items, setItems] = useState<SupportItem[]>([]); const [subject, setSubject] = useState(''); const [description, setDescription] = useState(''); const [category, setCategory] = useState('Puan'); const [message, setMessage] = useState(''); const [saving, setSaving] = useState(false)
+  async function load() { if (craftsmanId) setItems(await getSupportRequests(craftsmanId)) }
+  useEffect(() => { if (!craftsmanId) return; const controller = new AbortController(); getSupportRequests(craftsmanId, controller.signal).then(setItems).catch(() => setMessage('Talepler yüklenemedi.')); return () => controller.abort() }, [craftsmanId])
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSaving(true); setMessage(''); try { await createSupportRequest(craftsmanId, { category, subject, description }); setSubject(''); setDescription(''); setMessage('Destek talebin oluşturuldu.'); await load() } catch { setMessage('Talep oluşturulamadı.') } finally { setSaving(false) } }
+  return <><header className="page-header simple-header"><button onClick={back} type="button">‹</button><h1>Destek</h1><span>♧</span></header><form className="support-form" onSubmit={submit}><h2>Yeni destek talebi</h2><label>Kategori<select value={category} onChange={(event) => setCategory(event.target.value)}><option>Puan</option><option>Ürün Kodu</option><option>Ödül / Kupon</option><option>Hesap</option><option>Diğer</option></select></label><label>Konu<input value={subject} onChange={(event) => setSubject(event.target.value)} minLength={5} maxLength={140} required /></label><label>Açıklama<textarea value={description} onChange={(event) => setDescription(event.target.value)} minLength={10} maxLength={1500} required /></label>{message && <p>{message}</p>}<button disabled={saving} type="submit">{saving ? 'Gönderiliyor…' : 'Talebi Gönder'}</button></form><h2 className="request-title">Geçmiş talepler</h2><section className="request-list">{items.map((item) => <article key={item.id}><span>{item.category}</span><div><h3>{item.subject}</h3><small>{dateFormatter.format(new Date(item.createdAtUtc))}</small></div><b>{item.status === 'Open' ? 'Açık' : item.status === 'Resolved' ? 'Çözüldü' : 'İşlemde'}</b></article>)}</section></>
+}
+
 function App() {
   const [screen, setScreen] = useState<Screen>('home')
   const [dashboard, setDashboard] = useState(fallbackDashboard)
@@ -304,6 +318,8 @@ function App() {
     {screen === 'rewards' && <Rewards balance={dashboard.balance} craftsmanId={dashboard.craftsmanId} onBalanceChanged={refreshDashboard} />}
     {screen === 'wallet' && <Wallet dashboard={dashboard} go={setScreen} />}
     {screen === 'coupons' && <Coupons craftsmanId={dashboard.craftsmanId} back={() => setScreen('home')} />}
+    {screen === 'campaigns' && <Campaigns back={() => setScreen('home')} />}
+    {screen === 'support' && <Support craftsmanId={dashboard.craftsmanId} back={() => setScreen('home')} />}
     {screen === 'profile' && <Profile craftsmanId={dashboard.craftsmanId} onUpdated={refreshDashboard} />}
     <BottomNav screen={screen} setScreen={setScreen} />
   </main>

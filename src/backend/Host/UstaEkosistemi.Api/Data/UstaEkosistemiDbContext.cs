@@ -12,6 +12,8 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<PointLedgerEntry> PointLedgerEntries => Set<PointLedgerEntry>();
     public DbSet<Reward> Rewards => Set<Reward>();
     public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
+    public DbSet<Campaign> Campaigns => Set<Campaign>();
+    public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -83,6 +85,28 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc });
             entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Reward).WithMany().HasForeignKey(x => x.RewardId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Campaign>(entity =>
+        {
+            entity.ToTable("Campaigns", table => table.HasCheckConstraint("CK_Campaigns_Dates", "[EndsAtUtc] > [StartsAtUtc]"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(140).IsRequired();
+            entity.Property(x => x.Summary).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.PointMultiplier).HasPrecision(5, 2);
+            entity.HasIndex(x => new { x.IsActive, x.StartsAtUtc, x.EndsAtUtc });
+        });
+
+        modelBuilder.Entity<SupportRequest>(entity =>
+        {
+            entity.ToTable("SupportRequests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Category).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Subject).HasMaxLength(140).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1500).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc });
+            entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

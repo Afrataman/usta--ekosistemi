@@ -120,6 +120,26 @@ export async function updateCraftsmanProfile(craftsmanId: string, profile: Updat
   }
 }
 
+export type Campaign = { id: string; title: string; summary: string; pointMultiplier: number; startsAtUtc: string; endsAtUtc: string }
+export type SupportItem = { id: string; category: string; subject: string; description: string; status: string; createdAtUtc: string; resolvedAtUtc: string | null }
+
+export async function getCampaigns(signal?: AbortSignal): Promise<Campaign[]> {
+  const response = await fetch(`${apiBaseUrl}/api/campaigns`, { signal })
+  if (!response.ok) throw new Error('Kampanyalar alınamadı.')
+  return response.json() as Promise<Campaign[]>
+}
+
+export async function getSupportRequests(craftsmanId: string, signal?: AbortSignal): Promise<SupportItem[]> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { signal })
+  if (!response.ok) throw new Error('Destek talepleri alınamadı.')
+  return response.json() as Promise<SupportItem[]>
+}
+
+export async function createSupportRequest(craftsmanId: string, request: { category: string; subject: string; description: string }): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) })
+  if (!response.ok) throw new Error('Destek talebi oluşturulamadı.')
+}
+
 export async function getRewardRedemptions(craftsmanId: string, signal?: AbortSignal): Promise<RewardRedemption[]> {
   const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/reward-redemptions`, { signal })
   if (!response.ok) {
