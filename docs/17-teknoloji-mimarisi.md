@@ -14,7 +14,7 @@ ilişkisel veritabanından oluşacaktır.
 | Usta, bayi ve yönetici arayüzleri | React 19 + TypeScript + Vite | Mobil PWA desteği, ortak bileşen kullanımı ve geniş araç ekosistemi |
 | Backend | ASP.NET Core / .NET 10 LTS | Uzun destek süresi, güçlü tip güvenliği ve işlem yoğun iş kurallarına uygunluk |
 | Mimari | Modüler monolit | Başlangıçta tek sistem olarak kolay işletim; modüller arasında düzenli sınırlar |
-| Veritabanı | PostgreSQL 18 | İlişkisel işlemler, kısıtlar, raporlama ve denetim kayıtlarına uygunluk |
+| Veritabanı | Microsoft SQL Server | ASP.NET Core uyumu, ilişkisel işlemler, güçlü kısıtlar ve mevcut yerel geliştirme ortamı |
 | Veri erişimi | Entity Framework Core 10 | .NET ile bütünleşik şema, sorgu ve migration yönetimi |
 | API | REST + OpenAPI | Arayüzler için açık, test edilebilir ve yaygın sözleşme |
 | Test | xUnit, Vitest, Testing Library, Playwright | Birim, bileşen ve gerçek kullanıcı akışlarını ayrı seviyelerde doğrulama |
@@ -92,6 +92,18 @@ arayüz kontrolüne güvenilmez.
 - Yetki yalnızca ekranda değil, her API işleminde sunucu tarafından doğrulanır.
 - Kişisel veriler ve gizli anahtarlar kaynak kod deposuna yazılmaz.
 
+### Yerel veritabanı ortamı
+
+Geliştirme bilgisayarında SQL Server Express örneği `(local)\SQLEXPRESS` adıyla
+çalışır ve SQL Server Management Studio üzerinden Windows Authentication ile
+yönetilir. SQL Server Express geliştirme için yeterlidir; üretim ortamında aynı
+veritabanı şeması ihtiyaca uygun SQL Server sürümüne taşınabilir.
+
+Tablolar SSMS içinde elle oluşturulmaz. Entity Framework Core migration dosyalarıyla
+koddan üretilir. Böylece her şema değişikliği Git geçmişinde görünür ve diğer
+ortamlarda tekrarlanabilir. Bağlantı parolaları ve üretim bağlantı bilgileri GitHub'a
+eklenmez.
+
 ## 6. Çevrimdışı ve zayıf bağlantı
 
 PWA uygulama kabuğunu ve güvenli statik verileri önbelleğe alabilir. Puan kazandıran
@@ -159,7 +171,7 @@ kullanır.
 | Next.js | Giriş sonrası çalışan uygulamalarda SEO ve sunucu tarafı render faydası sınırlı |
 | Blazor PWA | React'in mobil web, QR ve ortak arayüz ekosistemi bu proje için daha uygun |
 | Tek rol uygulaması | Rol sınırlarını ve yayın süreçlerini gereksiz biçimde birbirine bağlar |
-| SQL Server | PostgreSQL ihtiyaçları karşılar, çapraz platform ve sağlayıcı esnekliği sunar |
+| PostgreSQL | Teknik olarak uygundur; ancak ekipte hazır SQL Server/SSMS ortamı ve kullanım kolaylığı tercih edilmiştir |
 | MongoDB | Puan, iade, kupon ve denetim ilişkileri güçlü SQL işlemlerine daha uygundur |
 | Yerel mobil uygulama | İlk sürümün dağıtımını ve bakımını iki platforma bölerek geciktirir |
 
@@ -167,7 +179,7 @@ kullanır.
 
 Aşağıdakiler pilot verileri ve ticari teklifler geldikten sonra seçilecektir:
 
-- Bulut ve veritabanı sağlayıcısı
+- Üretimde kullanılacak SQL Server sürümü ve barındırma sağlayıcısı
 - SMS firması ve yedek SMS firması
 - Nesne depolama sağlayıcısı
 - Üretim sunucusu kapasitesi ve yedekleme süresi
@@ -180,11 +192,10 @@ arkasında tutulacaktır.
 
 1. Monorepo ve geliştirme araçlarını kur.
 2. Ortak tasarım tokenlarını ve mobil uygulama kabuğunu oluştur.
-3. .NET çözümünü, modül sınırlarını ve PostgreSQL geliştirme ortamını oluştur.
+3. .NET çözümünü, modül sınırlarını ve SQL Server geliştirme ortamını oluştur.
 4. OpenAPI sözleşmesi ve otomatik TypeScript istemci üretimini kur.
 5. Kimlik doğrulama iskeleti ile sağlık kontrollerini hazırla.
 6. İlk dikey akış olarak kod doğrulama → satış eşleştirme → puan hareketini geliştir.
 
 Bu sıra, yalnızca ekran üretmek yerine kullanıcı arayüzünden veritabanına kadar çalışan
 küçük ama doğrulanabilir bir sistem kurar.
-
