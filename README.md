@@ -3,7 +3,30 @@
 Bu depo, **Usta Kulübü**, ileride eklenecek **Onaylı Usta Ağı** ve seçili işler için
 **Dijital Garanti** sisteminin ürün ve teknik belgelerini içerir.
 
-Şu anki aşama kodlama değil, **MVP gereksinimlerini kesinleştirme** aşamasıdır.
+MVP gereksinimleri ve teknoloji mimarisi belgelendirilmiştir. İlk çalışan kod
+iskeleti; React/TypeScript usta arayüzü ile ASP.NET Core API projesini içerir.
+
+## Yerel geliştirme
+
+Usta arayüzünü VS Code terminalinde çalıştırmak için:
+
+```powershell
+cd apps/usta-pwa
+npm install
+npm run dev
+```
+
+Terminalde gösterilen `http://localhost:5173` adresi tarayıcıda açılır.
+
+Backend'i çalıştırmak için:
+
+```powershell
+dotnet run --project src/backend/Host/UstaEkosistemi.Api
+```
+
+Sağlık kontrolü `/api/health` adresindedir. SQL Server tabloları sonraki aşamada
+Entity Framework Core migration dosyalarıyla oluşturulacaktır; SSMS'de elle tablo
+oluşturulmamalıdır.
 
 ## Neden önce belge hazırlıyoruz?
 

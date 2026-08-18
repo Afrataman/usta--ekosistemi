@@ -1,0 +1,54 @@
+:root { --ink:#f3f7f5; --muted:#94a59f; --panel:#132620; --panel-soft:#183129; --line:rgba(151,190,174,.16); --mint:#51f2b4; --mint-dark:#082e22; }
+* { box-sizing:border-box; }
+button { font:inherit; cursor:pointer; }
+button:focus-visible { outline:2px solid var(--mint); outline-offset:3px; }
+.app-shell { width:min(100%,430px); min-height:100svh; margin:0 auto; padding:20px 18px 108px; background:radial-gradient(circle at 75% -5%,rgba(53,235,168,.16),transparent 28%),linear-gradient(180deg,#07130f 0%,#0a1813 100%); }
+.topbar { display:flex; align-items:center; gap:11px; margin-bottom:22px; }
+.brand-mark { display:grid; place-items:center; width:42px; height:42px; border-radius:14px; color:var(--mint-dark); background:var(--mint); font-size:13px; font-weight:900; box-shadow:0 0 24px rgba(81,242,180,.25); }
+.welcome { display:flex; flex:1; flex-direction:column; line-height:1.25; }
+.welcome span { color:var(--muted); font-size:12px; }
+.welcome strong { color:var(--ink); font-size:16px; }
+.icon-button { position:relative; width:42px; height:42px; border:1px solid var(--line); border-radius:14px; color:var(--ink); background:rgba(255,255,255,.03); }
+.icon-button i { position:absolute; top:9px; right:10px; width:6px; height:6px; border-radius:50%; background:var(--mint); }
+.balance-card { position:relative; overflow:hidden; padding:18px; border:1px solid rgba(81,242,180,.32); border-radius:24px; background:linear-gradient(140deg,#18372c,#10231d 66%,#132b23); box-shadow:0 20px 45px rgba(0,0,0,.28),inset 0 1px rgba(255,255,255,.05); }
+.balance-card::after { content:''; position:absolute; width:140px; height:140px; top:-70px; right:-55px; border-radius:50%; background:rgba(81,242,180,.1); }
+.level-row { display:flex; align-items:center; justify-content:space-between; color:var(--muted); font-size:9px; }
+.level-badge { padding:5px 8px; border-radius:999px; color:#f9d987; background:rgba(249,217,135,.1); letter-spacing:.6px; font-weight:800; }
+.balance-card>p { margin:20px 0 0; color:var(--muted); font-size:12px; }
+.points { color:var(--ink); font-size:44px; line-height:1; letter-spacing:-2px; font-weight:800; }
+.balance-card .reward-value { margin-top:11px; font-size:11px; }
+.reward-value strong { color:var(--ink); }
+.progress { height:5px; margin-top:16px; overflow:hidden; border-radius:99px; background:rgba(255,255,255,.1); }
+.progress span { display:block; width:72%; height:100%; border-radius:inherit; background:linear-gradient(90deg,#35d99a,#72ffd0); box-shadow:0 0 10px var(--mint); }
+.scan-card { margin-top:14px; padding:18px; border:1px solid var(--line); border-radius:22px; background:rgba(19,38,32,.84); }
+.eyebrow { color:var(--mint); font-size:9px; font-weight:800; letter-spacing:1.2px; }
+.scan-card h1 { margin:4px 0 5px; color:var(--ink); font-size:22px; letter-spacing:-.5px; }
+.scan-card p { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+.scan-button { display:flex; align-items:center; justify-content:center; gap:9px; width:100%; margin-top:17px; padding:13px; border:0; border-radius:13px; color:#062319; background:var(--mint); font-size:12px; font-weight:900; box-shadow:0 8px 24px rgba(81,242,180,.17); }
+.qr-symbol { font-size:21px; line-height:0; }
+.text-button { width:100%; padding:11px 0 0; border:0; color:#b5c4bf; background:transparent; font-size:11px; }
+.content-section { margin-top:23px; }
+.section-heading { display:flex; align-items:end; justify-content:space-between; margin-bottom:12px; }
+.section-heading h2 { margin:2px 0 0; color:var(--ink); font-size:17px; }
+.section-heading>button { padding:0; border:0; color:var(--mint); background:transparent; font-size:10px; }
+.reward-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.reward-card { padding:13px; border:1px solid var(--line); border-radius:17px; background:linear-gradient(145deg,var(--panel-soft),var(--panel)); }
+.reward-icon { display:grid; place-items:center; width:36px; height:36px; margin-bottom:20px; border-radius:11px; color:var(--mint); background:rgba(81,242,180,.1); font-size:18px; font-weight:800; }
+.reward-card h3 { min-height:32px; margin:0; color:var(--ink); font-size:12px; line-height:1.35; }
+.reward-card p { margin:5px 0 12px; color:var(--mint); font-size:10px; font-weight:700; }
+.reward-card button { width:100%; padding:8px; border:1px solid rgba(81,242,180,.3); border-radius:9px; color:var(--mint); background:transparent; font-size:10px; }
+.movements { margin-bottom:4px; }
+.movement-row { display:grid; grid-template-columns:38px 1fr auto; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--line); }
+.movement-icon { display:grid; place-items:center; width:36px; height:36px; border-radius:11px; color:var(--mint); background:var(--panel); }
+.movement-row>div:nth-child(2) { display:flex; flex-direction:column; }
+.movement-row strong { color:var(--ink); font-size:11px; }
+.movement-row span { margin-top:2px; color:var(--muted); font-size:9px; }
+.movement-row b { color:#d4dedb; font-size:11px; }
+.movement-row b.positive { color:var(--mint); }
+.bottom-nav { position:fixed; z-index:5; bottom:0; left:50%; display:grid; grid-template-columns:repeat(5,1fr); width:min(100%,430px); padding:10px 12px max(12px,env(safe-area-inset-bottom)); transform:translateX(-50%); border-top:1px solid var(--line); background:rgba(7,19,15,.94); backdrop-filter:blur(16px); }
+.bottom-nav button { display:flex; flex-direction:column; align-items:center; gap:4px; border:0; color:#71827c; background:transparent; font-size:8px; }
+.bottom-nav button span { font-size:18px; }
+.bottom-nav button.active { color:var(--mint); }
+.bottom-nav .scan-nav { width:50px; height:50px; margin:-25px auto 0; border-radius:16px; color:#062319; background:var(--mint); box-shadow:0 0 25px rgba(81,242,180,.3); }
+.bottom-nav .scan-nav span { font-size:25px; }
+@media (min-width:700px) { body { padding:32px 0; } .app-shell { min-height:calc(100svh - 64px); border:1px solid var(--line); border-radius:34px; box-shadow:0 30px 80px rgba(0,0,0,.45); } .bottom-nav { bottom:32px; border-radius:0 0 33px 33px; } }
