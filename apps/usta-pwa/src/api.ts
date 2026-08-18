@@ -24,3 +24,25 @@ export async function getDemoDashboard(signal?: AbortSignal): Promise<Dashboard>
 
   return response.json() as Promise<Dashboard>
 }
+
+export type RedeemResult = {
+  earnedPoints: number
+  balance: number
+  product: string
+  redeemedAtUtc: string
+}
+
+export async function redeemProductCode(craftsmanId: string, code: string): Promise<RedeemResult> {
+  const response = await fetch(`${apiBaseUrl}/api/product-codes/redeem`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ craftsmanId, code }),
+  })
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null
+    throw new Error(body?.message ?? 'Kod kullanılamadı. Lütfen tekrar deneyin.')
+  }
+
+  return response.json() as Promise<RedeemResult>
+}

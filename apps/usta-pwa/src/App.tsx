@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { getDemoDashboard, type Dashboard } from './api'
+import { useEffect, useState, type FormEvent } from 'react'
+import { getDemoDashboard, redeemProductCode, type Dashboard } from './api'
 import './App.css'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'profile'
@@ -70,7 +70,33 @@ function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dash
   )
 }
 
-function Scanner({ back }: { back: () => void }) {
+function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsmanId: string; onRedeemed: () => Promise<void> }) {
+  const [manualEntryOpen, setManualEntryOpen] = useState(false)
+  const [code, setCode] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+
+  async function submitCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!craftsmanId) {
+      setResult({ kind: 'error', message: 'Backend bağlantısı kurulamadı. İkinci terminalde API’yi çalıştırın.' })
+      return
+    }
+
+    setSubmitting(true)
+    setResult(null)
+    try {
+      const response = await redeemProductCode(craftsmanId, code)
+      await onRedeemed()
+      setResult({ kind: 'success', message: `${response.product}: +${numberFormatter.format(response.earnedPoints)} puan eklendi.` })
+      setCode('')
+    } catch (error) {
+      setResult({ kind: 'error', message: error instanceof Error ? error.message : 'Kod kullanılamadı.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <>
       <header className="page-header"><button onClick={back} type="button">‹</button><h1>Ürün Kodunu Okut</h1><button type="button">?</button></header>
@@ -79,7 +105,13 @@ function Scanner({ back }: { back: () => void }) {
         <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
         <div className="product-box"><div className="box-top" /><div className="qr-art">▦</div><small>||||||||||</small></div>
       </div>
-      <button className="secondary-action scanner-manual" type="button"><span>⌨</span>Kodu Elle Gir</button>
+      <button className="secondary-action scanner-manual" onClick={() => setManualEntryOpen((open) => !open)} type="button"><span>⌨</span>Kodu Elle Gir</button>
+      {manualEntryOpen && <form className="manual-code-form" onSubmit={submitCode}>
+        <label htmlFor="product-code">Ürün kodu</label>
+        <div><input id="product-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="Örn. USTA-DEMO-2026" minLength={8} required autoComplete="off" /><button disabled={submitting} type="submit">{submitting ? 'Kontrol ediliyor…' : 'Kodu Kullan'}</button></div>
+        <small>Deneme kodu: <button onClick={() => setCode('USTA-DEMO-2026')} type="button">USTA-DEMO-2026</button></small>
+        {result && <p className={result.kind}>{result.message}</p>}
+      </form>}
       <section className="how-card"><h2>Nasıl Çalışır?</h2><div className="steps"><div><span>▦</span><small>Kodu Okut</small></div><b>→</b><div><span>♢</span><small>Ürün doğrulansın</small></div><b>→</b><div><span>★</span><small>Puanın hemen eklensin</small></div></div><p>♢ Her ürün kodu yalnızca bir kez kullanılabilir.</p></section>
       <div className="connection-warning">⌁ <strong>Bağlantı zayıf — işlem güvenle tekrar denenecek</strong></div>
     </>
@@ -118,10 +150,16 @@ function App() {
     return () => controller.abort()
   }, [])
 
+  async function refreshDashboard() {
+    const data = await getDemoDashboard()
+    setDashboard(data)
+    setConnected(true)
+  }
+
   return <main className="app-shell">
     <div className="status-bar"><strong>9:41</strong><span>▮▮ ◔ ▰</span></div>
     {screen === 'home' && <Home go={setScreen} dashboard={dashboard} connected={connected} />}
-    {screen === 'scan' && <Scanner back={() => setScreen('home')} />}
+    {screen === 'scan' && <Scanner back={() => setScreen('home')} craftsmanId={dashboard.craftsmanId} onRedeemed={refreshDashboard} />}
     {screen === 'rewards' && <Rewards balance={dashboard.balance} />}
     {screen === 'wallet' && <Placeholder title="Puan Cüzdanı" />}
     {screen === 'profile' && <Placeholder title="Profilim" />}

@@ -60,6 +60,18 @@ button:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
 .box-top { position:absolute; left:-1px; top:-34px; width:195px; height:36px; transform:skewY(5deg); clip-path:polygon(0 70%,67% 0,100% 34%,0 100%); background:#1e3a4e; border:1px solid #87939b; }
 .qr-art { position:absolute; right:25px; top:42px; color:#e5ebed; font-size:78px; transform:skewY(5deg); }.product-box small { position:absolute; left:9px; bottom:8px; color:#778891; }
 .scanner-manual { margin-top:25px; }
+.manual-code-form { margin-top:10px; padding:13px; border:1px solid #24628a; border-radius:11px; background:#081e2f; }
+.manual-code-form>label { display:block; margin-bottom:7px; color:#dce4e9; font-size:12px; }
+.manual-code-form>div { display:flex; gap:7px; }
+.manual-code-form input { min-width:0; flex:1; padding:10px; border:1px solid #356079; border-radius:8px; outline:0; color:white; background:#031321; font:600 12px ui-monospace,Consolas,monospace; text-transform:uppercase; }
+.manual-code-form input:focus { border-color:#319cf3; box-shadow:0 0 0 2px rgba(49,156,243,.18); }
+.manual-code-form>div>button { padding:0 12px; border:1px solid #3c9dff; border-radius:8px; color:white; background:linear-gradient(#0c7af1,#0751be); font-size:10px; }
+.manual-code-form>div>button:disabled { cursor:wait; opacity:.65; }
+.manual-code-form small { display:block; margin-top:9px; color:#8698a5; font-size:9px; }
+.manual-code-form small button { padding:0; border:0; color:var(--cyan); background:transparent; font:inherit; font-weight:700; }
+.manual-code-form>p { margin:10px 0 0; padding:9px; border-radius:7px; font-size:10px; }
+.manual-code-form>p.success { color:#b9ffeb; background:rgba(67,225,197,.13); }
+.manual-code-form>p.error { color:#ffd0d2; background:rgba(255,76,85,.13); }
 .how-card { margin-top:15px; overflow:hidden; border:1px solid var(--line); border-radius:13px; background:linear-gradient(#0e293d,#0a2031); }
 .how-card h2 { margin:13px 15px 6px; font-size:16px; font-weight:500; }
 .steps { display:flex; align-items:center; justify-content:space-around; padding:4px 12px 13px; }
