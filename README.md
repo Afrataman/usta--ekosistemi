@@ -25,8 +25,8 @@ dotnet run --project src/backend/Host/UstaEkosistemi.Api
 ```
 
 Sağlık kontrolü `/api/health` adresindedir. SQL Server tabloları sonraki aşamada
-Entity Framework Core migration dosyalarıyla oluşturulacaktır; SSMS'de elle tablo
-oluşturulmamalıdır.
+Entity Framework Core migration dosyalarıyla oluşturulur; SSMS'de elle tablo
+oluşturulmamalıdır. Yerel geliştirme veritabanı `UstaEkosistemiDev` adındadır.
 
 ## Neden önce belge hazırlıyoruz?
 

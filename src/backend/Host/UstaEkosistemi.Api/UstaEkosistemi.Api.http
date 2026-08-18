@@ -4,3 +4,25 @@ GET {{UstaEkosistemi.Api_HostAddress}}/api/health
 Accept: application/json
 
 ###
+
+POST {{UstaEkosistemi.Api_HostAddress}}/api/craftsmen
+Content-Type: application/json
+
+{
+  "phoneNumber": "05551234567",
+  "fullName": "Ahmet Usta",
+  "city": "Yalova"
+}
+
+###
+
+POST {{UstaEkosistemi.Api_HostAddress}}/api/products
+Content-Type: application/json
+
+{
+  "sku": "USTA-001",
+  "name": "Profesyonel Yapıştırıcı",
+  "basePoints": 600
+}
+
+###
