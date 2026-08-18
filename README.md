@@ -42,6 +42,7 @@ Bu paket şu sorulara cevap vermeyi amaçlar:
 | [14-mvp-gelistirme-sirasi.md](docs/14-mvp-gelistirme-sirasi.md) | Gereksinimlerin epiklere, bağımlılıklara ve teslim sırasına ayrılması | Ürün, yazılım, QA |
 | [15-arayuz-konsepti.md](docs/15-arayuz-konsepti.md) | Usta PWA, bayi ve yönetim panellerinin ilk görsel yönü | Ürün, tasarım ve kullanıcılar |
 | [16-tasarim-sistemi.md](docs/16-tasarim-sistemi.md) | Onaylı mobil yönün renk, tipografi, bileşen ve erişilebilirlik kuralları | Tasarım ve frontend |
+| [17-teknoloji-mimarisi.md](docs/17-teknoloji-mimarisi.md) | MVP teknoloji seçimleri, modüler mimari, klasör yapısı ve editör kullanımı | Ürün, yazılım ve operasyon |
 
 ## Belge durumları
 
