@@ -40,6 +40,8 @@ Bu paket şu sorulara cevap vermeyi amaçlar:
 | [12-p1-pilot-karar-onerileri.md](docs/12-p1-pilot-karar-onerileri.md) | Seviye, ilk ödül, bayi faydası, destek, risk ve pilot önerileri | Ürün ve operasyon |
 | [13-pilot-veri-toplama-formu.md](docs/13-pilot-veri-toplama-formu.md) | Pilot bölge, ürün, puan, ödül, bayi ve operasyon girdi formu | Proje sahibi ve iş birimleri |
 | [14-mvp-gelistirme-sirasi.md](docs/14-mvp-gelistirme-sirasi.md) | Gereksinimlerin epiklere, bağımlılıklara ve teslim sırasına ayrılması | Ürün, yazılım, QA |
+| [15-arayuz-konsepti.md](docs/15-arayuz-konsepti.md) | Usta PWA, bayi ve yönetim panellerinin ilk görsel yönü | Ürün, tasarım ve kullanıcılar |
+| [16-tasarim-sistemi.md](docs/16-tasarim-sistemi.md) | Onaylı mobil yönün renk, tipografi, bileşen ve erişilebilirlik kuralları | Tasarım ve frontend |
 
 ## Belge durumları
 
