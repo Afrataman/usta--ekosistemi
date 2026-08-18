@@ -11,6 +11,11 @@ K-001–K-008 için değerlendirme ve başlangıç önerileri
 [11-p0-karar-onerileri.md](11-p0-karar-onerileri.md) belgesinde hazırlanmıştır. Bu öneriler
 yetkili karar sahipleri onaylayana kadar bağlayıcı değildir.
 
+**18 Ağustos 2026 ürün sahibi değerlendirmesi:** K-001–K-008 önerileri ürün yönü olarak
+prensipte kabul edilmiştir. İlgili üretim, hukuk, mali işler, satış ve operasyon onayları
+tamamlanmadan kararlar tamamen kapatılmış sayılmaz. K-009–K-016 için başlangıç önerileri
+[12-p1-pilot-karar-onerileri.md](12-p1-pilot-karar-onerileri.md) belgesinde hazırlanmıştır.
+
 ## Karar öncelikleri
 
 - **P0:** Karar olmadan güvenli MVP tasarlanamaz.

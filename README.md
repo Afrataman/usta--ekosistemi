@@ -37,6 +37,7 @@ Bu paket şu sorulara cevap vermeyi amaçlar:
 | [09-gereksinim-matrisi.md](docs/09-gereksinim-matrisi.md) | Numaralı MVP gereksinimleri ve doğrulama bağlantıları | Ürün, yazılım, QA |
 | [10-github-calisma-akisi.md](docs/10-github-calisma-akisi.md) | Dal, commit, PR, inceleme ve yayın süreci | Ürün, yazılım, QA |
 | [11-p0-karar-onerileri.md](docs/11-p0-karar-onerileri.md) | MVP'yi etkileyen sekiz kritik karar için öneri ve gerekçeler | Karar sahipleri |
+| [12-p1-pilot-karar-onerileri.md](docs/12-p1-pilot-karar-onerileri.md) | Seviye, ilk ödül, bayi faydası, destek, risk ve pilot önerileri | Ürün ve operasyon |
 
 ## Belge durumları
 
