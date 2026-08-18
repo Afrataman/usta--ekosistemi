@@ -11,6 +11,8 @@ button:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
 .brand>span { font-size:32px; color:white; }
 .brand-header>button { border:0; color:white; background:transparent; font-size:25px; }
 .hello { margin:18px 4px 10px; color:#d3d7dc; font-size:16px; }
+.api-dot { display:inline-block; width:7px; height:7px; margin-left:5px; border-radius:50%; background:#f2ad24; box-shadow:0 0 7px #f2ad24; }
+.api-dot.connected { background:var(--cyan); box-shadow:0 0 7px var(--cyan); }
 .points-card { display:flex; align-items:center; justify-content:space-between; min-height:120px; padding:16px; border:1px solid #23618a; border-radius:14px; background:linear-gradient(125deg,#102b40,#062136); box-shadow:inset 0 1px rgba(255,255,255,.04); }
 .points-card strong { font-size:37px; line-height:1; letter-spacing:.2px; }
 .points-card strong small { font-size:21px; font-weight:500; }

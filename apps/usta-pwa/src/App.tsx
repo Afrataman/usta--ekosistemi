@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getDemoDashboard, type Dashboard } from './api'
 import './App.css'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'profile'
@@ -9,6 +10,24 @@ const rewards = [
   { name: 'Usta Montu', points: '3.000', art: '🦺' },
   { name: 'Dijital Hediye Kodu', points: '1.500', art: '🎁', digital: true },
 ]
+
+const fallbackDashboard: Dashboard = {
+  craftsmanId: '',
+  fullName: 'Ahmet Usta',
+  level: 'Silver',
+  balance: 10_000,
+  rewardValueTry: 500,
+  pointsToNextLevel: 2_500,
+  movements: [
+    { description: 'Ürün kodu okuma', createdAtUtc: new Date().toISOString(), amount: 250 },
+    { description: 'Kampanya bonusu', createdAtUtc: new Date().toISOString(), amount: 150 },
+    { description: 'Kupon kullanımı', createdAtUtc: new Date().toISOString(), amount: -50 },
+  ],
+}
+
+const numberFormatter = new Intl.NumberFormat('tr-TR')
+const dateFormatter = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+const levelNames: Record<string, string> = { Bronze: 'Bronz', Silver: 'Gümüş', Gold: 'Altın' }
 
 function BottomNav({ screen, setScreen }: { screen: Screen; setScreen: (screen: Screen) => void }) {
   return (
@@ -22,18 +41,18 @@ function BottomNav({ screen, setScreen }: { screen: Screen; setScreen: (screen: 
   )
 }
 
-function Home({ go }: { go: (screen: Screen) => void }) {
+function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dashboard: Dashboard; connected: boolean }) {
   return (
     <>
       <header className="brand-header"><div className="brand"><span>⚒</span><strong>Usta Kulübü</strong></div><button aria-label="Bildirimler" type="button">♧</button></header>
-      <p className="hello">Merhaba Ahmet Usta 👋</p>
+      <p className="hello">Merhaba {dashboard.fullName} 👋 <i className={connected ? 'api-dot connected' : 'api-dot'} title={connected ? 'SQL Server bağlantısı açık' : 'Örnek veriler gösteriliyor'} /></p>
 
       <section className="points-card">
-        <div><strong>10.000 <small>puan</small></strong><p>Bu puanla alabileceğiniz ödüllerin<br />değeri: 500 TL'ye kadar</p></div><span className="gift-art">♙</span>
+        <div><strong>{numberFormatter.format(dashboard.balance)} <small>puan</small></strong><p>Bu puanla alabileceğiniz ödüllerin<br />değeri: {numberFormatter.format(dashboard.rewardValueTry)} TL'ye kadar</p></div><span className="gift-art">♙</span>
       </section>
 
       <section className="level-card">
-        <div className="medal">★</div><div className="level-copy"><strong>Gümüş Seviye</strong><div className="level-progress"><i /></div><span>Altın seviyeye 2.500 puan</span></div><b>★</b>
+        <div className="medal">★</div><div className="level-copy"><strong>{levelNames[dashboard.level] ?? dashboard.level} Seviye</strong><div className="level-progress"><i /></div><span>Altın seviyeye {numberFormatter.format(dashboard.pointsToNextLevel)} puan</span></div><b>★</b>
       </section>
 
       <button className="primary-action" onClick={() => go('scan')} type="button"><span>▦</span>QR Okut</button>
@@ -46,11 +65,7 @@ function Home({ go }: { go: (screen: Screen) => void }) {
       </div>
 
       <div className="section-row"><h2>Son Puan Hareketleri</h2><button type="button">Tümü ›</button></div>
-      <div className="movement-list">
-        <div><span>Ürün kodu okuma</span><time>Bugün 09:21</time><b>+250</b></div>
-        <div><span>Kampanya bonusu</span><time>Dün 16:48</time><b>+150</b></div>
-        <div><span>Kupon kullanımı</span><time>Dün 11:02</time><b className="minus">-50</b></div>
-      </div>
+      <div className="movement-list">{dashboard.movements.map((movement, index) => <div key={`${movement.createdAtUtc}-${index}`}><span>{movement.description}</span><time>{dateFormatter.format(new Date(movement.createdAtUtc))}</time><b className={movement.amount < 0 ? 'minus' : ''}>{movement.amount > 0 ? '+' : ''}{numberFormatter.format(movement.amount)}</b></div>)}</div>
     </>
   )
 }
@@ -71,10 +86,10 @@ function Scanner({ back }: { back: () => void }) {
   )
 }
 
-function Rewards() {
+function Rewards({ balance }: { balance: number }) {
   return (
     <>
-      <header className="rewards-header"><h1>Ödüller</h1><strong>10.000 <small>puan</small></strong></header>
+      <header className="rewards-header"><h1>Ödüller</h1><strong>{numberFormatter.format(balance)} <small>puan</small></strong></header>
       <div className="filters"><button className="selected" type="button">Tümü</button><button type="button">Dijital</button><button type="button">Bayiden Teslim</button></div>
       <div className="rewards-grid">
         {rewards.map((reward) => <article className="reward-product" key={reward.name}>
@@ -92,11 +107,22 @@ function Placeholder({ title }: { title: string }) {
 
 function App() {
   const [screen, setScreen] = useState<Screen>('home')
+  const [dashboard, setDashboard] = useState(fallbackDashboard)
+  const [connected, setConnected] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getDemoDashboard(controller.signal)
+      .then((data) => { setDashboard(data); setConnected(true) })
+      .catch(() => setConnected(false))
+    return () => controller.abort()
+  }, [])
+
   return <main className="app-shell">
     <div className="status-bar"><strong>9:41</strong><span>▮▮ ◔ ▰</span></div>
-    {screen === 'home' && <Home go={setScreen} />}
+    {screen === 'home' && <Home go={setScreen} dashboard={dashboard} connected={connected} />}
     {screen === 'scan' && <Scanner back={() => setScreen('home')} />}
-    {screen === 'rewards' && <Rewards />}
+    {screen === 'rewards' && <Rewards balance={dashboard.balance} />}
     {screen === 'wallet' && <Placeholder title="Puan Cüzdanı" />}
     {screen === 'profile' && <Placeholder title="Profilim" />}
     <BottomNav screen={screen} setScreen={setScreen} />
