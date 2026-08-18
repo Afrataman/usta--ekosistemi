@@ -39,6 +39,7 @@ Bu paket şu sorulara cevap vermeyi amaçlar:
 | [11-p0-karar-onerileri.md](docs/11-p0-karar-onerileri.md) | MVP'yi etkileyen sekiz kritik karar için öneri ve gerekçeler | Karar sahipleri |
 | [12-p1-pilot-karar-onerileri.md](docs/12-p1-pilot-karar-onerileri.md) | Seviye, ilk ödül, bayi faydası, destek, risk ve pilot önerileri | Ürün ve operasyon |
 | [13-pilot-veri-toplama-formu.md](docs/13-pilot-veri-toplama-formu.md) | Pilot bölge, ürün, puan, ödül, bayi ve operasyon girdi formu | Proje sahibi ve iş birimleri |
+| [14-mvp-gelistirme-sirasi.md](docs/14-mvp-gelistirme-sirasi.md) | Gereksinimlerin epiklere, bağımlılıklara ve teslim sırasına ayrılması | Ürün, yazılım, QA |
 
 ## Belge durumları
 
