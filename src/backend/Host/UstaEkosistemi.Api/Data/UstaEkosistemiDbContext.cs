@@ -10,6 +10,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductCode> ProductCodes => Set<ProductCode>();
     public DbSet<PointLedgerEntry> PointLedgerEntries => Set<PointLedgerEntry>();
+    public DbSet<Reward> Rewards => Set<Reward>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -54,6 +55,21 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc });
             entity.HasIndex(x => new { x.ReferenceType, x.ReferenceId, x.TransactionType }).IsUnique();
             entity.HasOne(x => x.Craftsman).WithMany(x => x.PointLedgerEntries).HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Reward>(entity =>
+        {
+            entity.ToTable("Rewards", table =>
+            {
+                table.HasCheckConstraint("CK_Rewards_PointCost", "[PointCost] > 0");
+                table.HasCheckConstraint("CK_Rewards_StockQuantity", "[StockQuantity] IS NULL OR [StockQuantity] >= 0");
+            });
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(400).IsRequired();
+            entity.Property(x => x.DeliveryType).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.ImageKey).HasMaxLength(50).IsRequired();
+            entity.HasIndex(x => new { x.IsActive, x.DisplayOrder });
         });
     }
 }

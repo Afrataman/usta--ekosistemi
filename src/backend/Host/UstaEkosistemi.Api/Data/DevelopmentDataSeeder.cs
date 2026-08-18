@@ -62,6 +62,27 @@ public static class DevelopmentDataSeeder
             });
         }
 
+        if (!await dbContext.Rewards.AnyAsync(cancellationToken))
+        {
+            dbContext.Rewards.AddRange(
+                CreateReward("55555555-5555-5555-5555-555555555551", "Takım Çantası", "Dayanıklı profesyonel takım çantası", 2_500, RewardDeliveryType.DealerPickup, "tool-bag", 40, 1),
+                CreateReward("55555555-5555-5555-5555-555555555552", "Akülü Matkap", "Profesyonel kullanıma uygun akülü matkap", 7_500, RewardDeliveryType.DealerPickup, "drill", 15, 2),
+                CreateReward("55555555-5555-5555-5555-555555555553", "Usta Montu", "Çok cepli dayanıklı çalışma montu", 3_000, RewardDeliveryType.DealerPickup, "work-jacket", 60, 3),
+                CreateReward("55555555-5555-5555-5555-555555555554", "Dijital Hediye Kodu", "Anında teslim edilen dijital alışveriş kodu", 1_500, RewardDeliveryType.Digital, "digital-gift", null, 4));
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    private static Reward CreateReward(string id, string name, string description, int pointCost, RewardDeliveryType deliveryType, string imageKey, int? stockQuantity, int displayOrder) => new()
+    {
+        Id = Guid.Parse(id),
+        Name = name,
+        Description = description,
+        PointCost = pointCost,
+        DeliveryType = deliveryType,
+        ImageKey = imageKey,
+        StockQuantity = stockQuantity,
+        DisplayOrder = displayOrder
+    };
 }

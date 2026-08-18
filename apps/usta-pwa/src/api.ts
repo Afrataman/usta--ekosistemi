@@ -48,6 +48,27 @@ export type Wallet = {
   movements: WalletMovement[]
 }
 
+export type Reward = {
+  id: string
+  name: string
+  description: string
+  pointCost: number
+  deliveryType: 'Digital' | 'DealerPickup'
+  imageKey: string
+  stockQuantity: number | null
+  isAvailable: boolean
+}
+
+export async function getRewards(deliveryType?: Reward['deliveryType'], signal?: AbortSignal): Promise<Reward[]> {
+  const query = deliveryType ? `?deliveryType=${deliveryType}` : ''
+  const response = await fetch(`${apiBaseUrl}/api/rewards${query}`, { signal })
+  if (!response.ok) {
+    throw new Error('Ödül kataloğu alınamadı.')
+  }
+
+  return response.json() as Promise<Reward[]>
+}
+
 export async function getWallet(craftsmanId: string, signal?: AbortSignal): Promise<Wallet> {
   const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/wallet`, { signal })
   if (!response.ok) {

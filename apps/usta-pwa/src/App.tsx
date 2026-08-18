@@ -1,15 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { getDemoDashboard, getWallet, redeemProductCode, type Dashboard, type Wallet as WalletData } from './api'
+import { getDemoDashboard, getRewards, getWallet, redeemProductCode, type Dashboard, type Reward, type Wallet as WalletData } from './api'
 import './App.css'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'profile'
 
-const rewards = [
-  { name: 'Takım Çantası', points: '2.500', art: '🧰', delivery: 'Hemen Teslim' },
-  { name: 'Akülü Matkap', points: '7.500', art: '🔧' },
-  { name: 'Usta Montu', points: '3.000', art: '🦺' },
-  { name: 'Dijital Hediye Kodu', points: '1.500', art: '🎁', digital: true },
+const fallbackRewards: Reward[] = [
+  { id: '1', name: 'Takım Çantası', description: '', pointCost: 2_500, imageKey: 'tool-bag', deliveryType: 'DealerPickup', stockQuantity: 40, isAvailable: true },
+  { id: '2', name: 'Akülü Matkap', description: '', pointCost: 7_500, imageKey: 'drill', deliveryType: 'DealerPickup', stockQuantity: 15, isAvailable: true },
+  { id: '3', name: 'Usta Montu', description: '', pointCost: 3_000, imageKey: 'work-jacket', deliveryType: 'DealerPickup', stockQuantity: 60, isAvailable: true },
+  { id: '4', name: 'Dijital Hediye Kodu', description: '', pointCost: 1_500, imageKey: 'digital-gift', deliveryType: 'Digital', stockQuantity: null, isAvailable: true },
 ]
+const rewardArt: Record<string, string> = { 'tool-bag': '🧰', drill: '🔧', 'work-jacket': '🦺', 'digital-gift': '🎁' }
 
 const fallbackDashboard: Dashboard = {
   craftsmanId: '',
@@ -119,13 +120,29 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
 }
 
 function Rewards({ balance }: { balance: number }) {
+  const [filter, setFilter] = useState<'all' | Reward['deliveryType']>('all')
+  const [catalog, setCatalog] = useState(fallbackRewards)
+  const [connected, setConnected] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getRewards(filter === 'all' ? undefined : filter, controller.signal)
+      .then((items) => { setCatalog(items); setConnected(true) })
+      .catch(() => {
+        setConnected(false)
+        setCatalog(filter === 'all' ? fallbackRewards : fallbackRewards.filter((item) => item.deliveryType === filter))
+      })
+    return () => controller.abort()
+  }, [filter])
+
   return (
     <>
       <header className="rewards-header"><h1>Ödüller</h1><strong>{numberFormatter.format(balance)} <small>puan</small></strong></header>
-      <div className="filters"><button className="selected" type="button">Tümü</button><button type="button">Dijital</button><button type="button">Bayiden Teslim</button></div>
+      <div className="filters"><button className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')} type="button">Tümü</button><button className={filter === 'Digital' ? 'selected' : ''} onClick={() => setFilter('Digital')} type="button">Dijital</button><button className={filter === 'DealerPickup' ? 'selected' : ''} onClick={() => setFilter('DealerPickup')} type="button">Bayiden Teslim</button></div>
+      <div className={connected ? 'catalog-source connected' : 'catalog-source'}>{connected ? 'Canlı katalog' : 'Örnek katalog'}</div>
       <div className="rewards-grid">
-        {rewards.map((reward) => <article className="reward-product" key={reward.name}>
-          {reward.delivery && <span className="delivery">{reward.delivery}</span>}<div className="product-art">{reward.art}</div><h2>{reward.name}</h2><p>{reward.points} puan</p><button type="button">{reward.digital ? 'İncele' : 'Ödülü Al'}</button>
+        {catalog.map((reward) => <article className="reward-product" key={reward.id} title={reward.description}>
+          {reward.deliveryType === 'DealerPickup' && <span className="delivery">Bayiden Teslim</span>}<div className="product-art">{rewardArt[reward.imageKey] ?? '🎁'}</div><h2>{reward.name}</h2><p>{numberFormatter.format(reward.pointCost)} puan</p><button disabled={!reward.isAvailable || balance < reward.pointCost} type="button">{!reward.isAvailable ? 'Stokta Yok' : balance < reward.pointCost ? 'Puan Yetersiz' : reward.deliveryType === 'Digital' ? 'İncele' : 'Ödülü Al'}</button>
         </article>)}
       </div>
       <div className="points-note">ⓘ <span>Puanlar nakit değildir; yalnızca program ödüllerinde kullanılır.</span></div>
