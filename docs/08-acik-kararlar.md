@@ -7,6 +7,10 @@ Bu belge hata veya eksiklik listesi değildir. Kodlamadan önce ilgili iş sahib
 gereken konuları görünür kılar. Her karar kapatılırken karar sahibi, tarih, gerekçe ve etkilenen
 belgeler yazılmalıdır.
 
+K-001–K-008 için değerlendirme ve başlangıç önerileri
+[11-p0-karar-onerileri.md](11-p0-karar-onerileri.md) belgesinde hazırlanmıştır. Bu öneriler
+yetkili karar sahipleri onaylayana kadar bağlayıcı değildir.
+
 ## Karar öncelikleri
 
 - **P0:** Karar olmadan güvenli MVP tasarlanamaz.
