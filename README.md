@@ -8,7 +8,13 @@ iskeleti; React/TypeScript usta arayüzü ile ASP.NET Core API projesini içerir
 
 ## Yerel geliştirme
 
-Usta arayüzünü VS Code terminalinde çalıştırmak için:
+Usta arayüzünü görmek için önce iki ayrı VS Code terminali açın. Birinci terminalde backend'i çalıştırın:
+
+```powershell
+dotnet run --project src/backend/Host/UstaEkosistemi.Api
+```
+
+İkinci terminalde arayüzü çalıştırın:
 
 ```powershell
 cd apps/usta-pwa
@@ -16,13 +22,7 @@ npm install
 npm run dev
 ```
 
-Terminalde gösterilen `http://localhost:5173` adresi tarayıcıda açılır.
-
-Backend'i çalıştırmak için:
-
-```powershell
-dotnet run --project src/backend/Host/UstaEkosistemi.Api
-```
+Terminalde gösterilen `http://localhost:5173` adresini tarayıcıda açın. Telefon görünümünü görmek için tarayıcı penceresini daraltabilir veya `F12` ile cihaz araç çubuğunu açabilirsiniz.
 
 Sağlık kontrolü `/api/health` adresindedir. SQL Server tabloları sonraki aşamada
 Entity Framework Core migration dosyalarıyla oluşturulur; SSMS'de elle tablo

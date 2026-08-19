@@ -292,15 +292,27 @@ function Support({ craftsmanId, back }: { craftsmanId: string; back: () => void 
   return <><header className="page-header simple-header"><button onClick={back} type="button">‹</button><h1>Destek</h1><span>♧</span></header><form className="support-form" onSubmit={submit}><h2>Yeni destek talebi</h2><label>Kategori<select value={category} onChange={(event) => setCategory(event.target.value)}><option>Puan</option><option>Ürün Kodu</option><option>Ödül / Kupon</option><option>Hesap</option><option>Diğer</option></select></label><label>Konu<input value={subject} onChange={(event) => setSubject(event.target.value)} minLength={5} maxLength={140} required /></label><label>Açıklama<textarea value={description} onChange={(event) => setDescription(event.target.value)} minLength={10} maxLength={1500} required /></label>{message && <p>{message}</p>}<button disabled={saving} type="submit">{saving ? 'Gönderiliyor…' : 'Talebi Gönder'}</button></form><h2 className="request-title">Geçmiş talepler</h2><section className="request-list">{items.map((item) => <article key={item.id}><span>{item.category}</span><div><h3>{item.subject}</h3><small>{dateFormatter.format(new Date(item.createdAtUtc))}</small></div><b>{item.status === 'Open' ? 'Açık' : item.status === 'Resolved' ? 'Çözüldü' : 'İşlemde'}</b></article>)}</section></>
 }
 
-function Login({ onAuthenticated }: { onAuthenticated: (craftsmanId: string) => void }) {
+function Login({ onAuthenticated }: { onAuthenticated: (craftsmanId: string, needsProfile: boolean) => void }) {
   const [phone, setPhone] = useState('05550000000'); const [challengeId, setChallengeId] = useState(''); const [code, setCode] = useState(''); const [developmentCode, setDevelopmentCode] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false)
   async function requestCode(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await requestOtpCode(phone); setChallengeId(result.id); setDevelopmentCode(result.developmentCode ?? ''); setMessage('6 haneli doğrulama kodu gönderildi.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Kod gönderilemedi.') } finally { setBusy(false) } }
-  async function verify(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await verifyOtpCode(challengeId, code); onAuthenticated(result.craftsmanId) } catch (error) { setMessage(error instanceof Error ? error.message : 'Kod doğrulanamadı.') } finally { setBusy(false) } }
+  async function verify(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await verifyOtpCode(challengeId, code); onAuthenticated(result.craftsmanId, result.needsProfile) } catch (error) { setMessage(error instanceof Error ? error.message : 'Kod doğrulanamadı.') } finally { setBusy(false) } }
   return <main className="login-shell"><div className="login-logo">⚒</div><span className="login-eyebrow">USTA KULÜBÜ</span><h1>Puanın, ödülün,<br />emeğinin karşılığı.</h1><p>Telefon numaranla güvenli ve kolayca giriş yap.</p>{!challengeId ? <form onSubmit={requestCode}><label>Telefon numarası<input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" placeholder="05xx xxx xx xx" required /></label><button disabled={busy} type="submit">{busy ? 'Gönderiliyor…' : 'SMS Kodu Gönder'}</button></form> : <form onSubmit={verify}><label>6 haneli kod<input className="otp-input" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" placeholder="••••••" required autoFocus /></label>{developmentCode && <small>Geliştirme kodu: <button onClick={() => setCode(developmentCode)} type="button">{developmentCode}</button></small>}<button disabled={busy || code.length !== 6} type="submit">{busy ? 'Kontrol ediliyor…' : 'Giriş Yap'}</button><button className="login-back" onClick={() => { setChallengeId(''); setCode(''); setMessage('') }} type="button">Numarayı değiştir</button></form>}{message && <div className="login-message">{message}</div>}<small className="login-legal">Devam ederek üyelik ve kişisel veri koşullarını kabul etmiş olursun.</small></main>
+}
+
+function ProfileSetup({ craftsmanId, onCompleted }: { craftsmanId: string; onCompleted: () => void }) {
+  const [fullName, setFullName] = useState(''); const [city, setCity] = useState(''); const [saving, setSaving] = useState(false); const [message, setMessage] = useState('')
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setSaving(true); setMessage('')
+    try { await updateCraftsmanProfile(craftsmanId, { fullName, city, campaignNotificationsEnabled: true, smsNotificationsEnabled: true }); onCompleted() }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Profil kaydedilemedi.') }
+    finally { setSaving(false) }
+  }
+  return <main className="login-shell setup-shell"><div className="login-logo">✓</div><span className="login-eyebrow">SON BİR ADIM</span><h1>Seni tanıyalım,<br />kulübe hoş geldin.</h1><p>Ödül ve kampanyaları sana uygun gösterebilmemiz için kısa profilini tamamla.</p><form onSubmit={submit}><label>Ad soyad<input value={fullName} onChange={(event) => setFullName(event.target.value)} minLength={3} maxLength={120} placeholder="Adınız ve soyadınız" required autoFocus /></label><label>Şehir<input value={city} onChange={(event) => setCity(event.target.value)} maxLength={80} placeholder="Örn. Yalova" /></label>{message && <div className="login-message">{message}</div>}<button disabled={saving} type="submit">{saving ? 'Kaydediliyor…' : 'Kulübe Katıl'}</button></form><small className="login-legal">Bilgilerini daha sonra Profil ekranından değiştirebilirsin.</small></main>
 }
 
 function App() {
   const [craftsmanId, setCraftsmanId] = useState(() => localStorage.getItem('usta-craftsman-id') ?? '')
+  const [needsProfile, setNeedsProfile] = useState(() => localStorage.getItem('usta-needs-profile') === 'true')
   const [screen, setScreen] = useState<Screen>('home')
   const [dashboard, setDashboard] = useState(fallbackDashboard)
   const [connected, setConnected] = useState(false)
@@ -327,10 +339,12 @@ function App() {
     setConnected(true)
   }
 
-  function authenticated(id: string) { localStorage.setItem('usta-craftsman-id', id); setCraftsmanId(id) }
-  function logout() { localStorage.removeItem('usta-craftsman-id'); setCraftsmanId(''); setDashboard(fallbackDashboard); setScreen('home') }
+  function authenticated(id: string, profileRequired: boolean) { localStorage.setItem('usta-craftsman-id', id); localStorage.setItem('usta-needs-profile', String(profileRequired)); setCraftsmanId(id); setNeedsProfile(profileRequired) }
+  function profileCompleted() { localStorage.removeItem('usta-needs-profile'); setNeedsProfile(false); void refreshDashboard() }
+  function logout() { localStorage.removeItem('usta-craftsman-id'); localStorage.removeItem('usta-needs-profile'); setCraftsmanId(''); setNeedsProfile(false); setDashboard(fallbackDashboard); setScreen('home') }
 
   if (!craftsmanId) return <Login onAuthenticated={authenticated} />
+  if (needsProfile) return <ProfileSetup craftsmanId={craftsmanId} onCompleted={profileCompleted} />
 
   return <main className="app-shell">
     <div className="status-bar"><strong>9:41</strong><span>▮▮ ◔ ▰</span></div>
