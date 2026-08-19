@@ -70,7 +70,8 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
             CraftsmanId = request.CraftsmanId,
             RewardId = reward.Id,
             PointsSpent = reward.PointCost,
-            FulfillmentCode = $"UK-{Guid.NewGuid():N}"[..15].ToUpperInvariant()
+            FulfillmentCode = $"UK-{Guid.NewGuid():N}"[..15].ToUpperInvariant(),
+            ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30)
         };
         dbContext.RewardRedemptions.Add(redemption);
         dbContext.PointLedgerEntries.Add(new PointLedgerEntry

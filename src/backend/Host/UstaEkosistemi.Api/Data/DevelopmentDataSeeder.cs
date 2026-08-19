@@ -11,6 +11,8 @@ public static class DevelopmentDataSeeder
     private static readonly Guid DemoProductId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid DemoProductCodeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
     public const string DemoProductCode = "USTA-DEMO-2026";
+    public static readonly Guid DemoDealerId = Guid.Parse("77777777-7777-7777-7777-777777777771");
+    public static readonly Guid DemoDealerEmployeeId = Guid.Parse("77777777-7777-7777-7777-777777777772");
 
     public static async Task EnsureCreatedAsync(UstaEkosistemiDbContext dbContext, CancellationToken cancellationToken)
     {
@@ -77,6 +79,12 @@ public static class DevelopmentDataSeeder
             dbContext.Campaigns.AddRange(
                 new Campaign { Id = Guid.Parse("66666666-6666-6666-6666-666666666661"), Title = "Ağustos Çifte Puan", Summary = "Seçili ürün kodlarında puanlar iki kat değerinde.", PointMultiplier = 2, StartsAtUtc = now.AddDays(-5), EndsAtUtc = now.AddDays(25), DisplayOrder = 1 },
                 new Campaign { Id = Guid.Parse("66666666-6666-6666-6666-666666666662"), Title = "İlk Ödül Fırsatı", Summary = "İlk ödülünü alan ustalara özel avantajlı katalog.", PointMultiplier = 1, StartsAtUtc = now.AddDays(-5), EndsAtUtc = now.AddDays(55), DisplayOrder = 2 });
+        }
+
+        if (!await dbContext.Dealers.AnyAsync(x => x.Id == DemoDealerId, cancellationToken))
+        {
+            dbContext.Dealers.Add(new Dealer { Id = DemoDealerId, Code = "YLV-001", Name = "Yalova Merkez Bayi" });
+            dbContext.DealerEmployees.Add(new DealerEmployee { Id = DemoDealerEmployeeId, DealerId = DemoDealerId, FullName = "Demo Bayi Görevlisi" });
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

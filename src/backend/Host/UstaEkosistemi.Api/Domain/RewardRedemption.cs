@@ -9,9 +9,12 @@ public sealed class RewardRedemption
     public RewardRedemptionStatus Status { get; set; } = RewardRedemptionStatus.Created;
     public required string FulfillmentCode { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? ExpiresAtUtc { get; set; }
     public DateTimeOffset? FulfilledAtUtc { get; set; }
+    public Guid? FulfilledByDealerEmployeeId { get; set; }
     public Craftsman Craftsman { get; set; } = null!;
     public Reward Reward { get; set; } = null!;
+    public DealerEmployee? FulfilledByDealerEmployee { get; set; }
 }
 
 public enum RewardRedemptionStatus

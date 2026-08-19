@@ -29,6 +29,7 @@ public sealed class RewardRedemptionsController(UstaEkosistemiDbContext dbContex
                 x.PointsSpent,
                 x.FulfillmentCode,
                 x.CreatedAtUtc,
+                x.ExpiresAtUtc,
                 x.FulfilledAtUtc
             })
             .ToListAsync(cancellationToken);

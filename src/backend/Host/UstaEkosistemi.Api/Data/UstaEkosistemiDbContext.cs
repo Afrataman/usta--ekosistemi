@@ -15,6 +15,8 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
     public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
+    public DbSet<Dealer> Dealers => Set<Dealer>();
+    public DbSet<DealerEmployee> DealerEmployees => Set<DealerEmployee>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -87,6 +89,17 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc });
             entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Reward).WithMany().HasForeignKey(x => x.RewardId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.FulfilledByDealerEmployee).WithMany().HasForeignKey(x => x.FulfilledByDealerEmployeeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Dealer>(entity =>
+        {
+            entity.ToTable("Dealers"); entity.HasKey(x => x.Id); entity.Property(x => x.Code).HasMaxLength(30).IsRequired(); entity.HasIndex(x => x.Code).IsUnique(); entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+        });
+
+        modelBuilder.Entity<DealerEmployee>(entity =>
+        {
+            entity.ToTable("DealerEmployees"); entity.HasKey(x => x.Id); entity.Property(x => x.FullName).HasMaxLength(120).IsRequired(); entity.HasIndex(x => new { x.DealerId, x.IsActive }); entity.HasOne(x => x.Dealer).WithMany(x => x.Employees).HasForeignKey(x => x.DealerId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Campaign>(entity =>
