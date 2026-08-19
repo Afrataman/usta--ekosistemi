@@ -25,6 +25,27 @@ export async function getDemoDashboard(signal?: AbortSignal): Promise<Dashboard>
   return response.json() as Promise<Dashboard>
 }
 
+export async function getCraftsmanDashboard(craftsmanId: string, signal?: AbortSignal): Promise<Dashboard> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/dashboard`, { signal })
+  if (!response.ok) throw new Error('Dashboard alınamadı.')
+  return response.json() as Promise<Dashboard>
+}
+
+export type OtpChallenge = { id: string; expiresInSeconds: number; developmentCode: string | null }
+export async function requestOtpCode(phoneNumber: string): Promise<OtpChallenge> {
+  const response = await fetch(`${apiBaseUrl}/api/auth/request-code`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phoneNumber }) })
+  const body = await response.json() as OtpChallenge & { message?: string }
+  if (!response.ok) throw new Error(body.message ?? 'Kod gönderilemedi.')
+  return body
+}
+
+export async function verifyOtpCode(challengeId: string, code: string): Promise<{ craftsmanId: string; fullName: string; needsProfile: boolean }> {
+  const response = await fetch(`${apiBaseUrl}/api/auth/verify-code`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, code }) })
+  const body = await response.json() as { craftsmanId: string; fullName: string; needsProfile: boolean; message?: string }
+  if (!response.ok) throw new Error(body.message ?? 'Kod doğrulanamadı.')
+  return body
+}
+
 export type RedeemResult = {
   earnedPoints: number
   balance: number

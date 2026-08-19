@@ -14,6 +14,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
+    public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -107,6 +108,16 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc });
             entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OtpChallenge>(entity =>
+        {
+            entity.ToTable("OtpChallenges");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CodeHash).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.CodeSalt).HasMaxLength(50).IsRequired();
+            entity.HasIndex(x => new { x.PhoneNumber, x.CreatedAtUtc });
         });
     }
 }

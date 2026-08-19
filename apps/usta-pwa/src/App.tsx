@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { createSupportRequest, getCampaigns, getCraftsmanProfile, getDemoDashboard, getRewardRedemptions, getRewards, getSupportRequests, getWallet, redeemProductCode, redeemReward, updateCraftsmanProfile, type Campaign, type CraftsmanProfile, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
+import { createSupportRequest, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getRewardRedemptions, getRewards, getSupportRequests, getWallet, redeemProductCode, redeemReward, requestOtpCode, updateCraftsmanProfile, verifyOtpCode, type Campaign, type CraftsmanProfile, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
 import './App.css'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'campaigns' | 'support' | 'profile'
@@ -246,7 +246,7 @@ function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void 
   </>
 }
 
-function Profile({ craftsmanId, onUpdated }: { craftsmanId: string; onUpdated: () => Promise<void> }) {
+function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; onUpdated: () => Promise<void>; onLogout: () => void }) {
   const [profile, setProfile] = useState<CraftsmanProfile | null>(null)
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
@@ -275,7 +275,7 @@ function Profile({ craftsmanId, onUpdated }: { craftsmanId: string; onUpdated: (
   return <><header className="profile-header"><div className="profile-avatar">AU</div><div><h1>{profile.fullName}</h1><span>{levelNames[profile.level] ?? profile.level} Seviye</span></div></header>
     <form className="profile-form" onSubmit={save}><section><h2>Kişisel bilgiler</h2><label>Ad soyad<input value={profile.fullName} onChange={(event) => setProfile({ ...profile, fullName: event.target.value })} minLength={3} maxLength={120} required /></label><label>Şehir<input value={profile.city ?? ''} onChange={(event) => setProfile({ ...profile, city: event.target.value })} maxLength={80} placeholder="Şehir seçilmedi" /></label><label>Telefon numarası<div className="locked-field"><span>{maskedPhone}</span><b>Doğrulandı</b></div><small>Telefon değişikliği SMS doğrulaması gerektirir.</small></label></section>
       <section><h2>Bildirim tercihleri</h2><label className="toggle-row"><div><strong>Kampanya bildirimleri</strong><small>Yeni kampanya ve fırsatları uygulamada göster.</small></div><input type="checkbox" checked={profile.campaignNotificationsEnabled} onChange={(event) => setProfile({ ...profile, campaignNotificationsEnabled: event.target.checked })} /><i /></label><label className="toggle-row"><div><strong>SMS bildirimleri</strong><small>Önemli puan ve kupon bilgilerini SMS ile al.</small></div><input type="checkbox" checked={profile.smsNotificationsEnabled} onChange={(event) => setProfile({ ...profile, smsNotificationsEnabled: event.target.checked })} /><i /></label></section>
-      <div className="profile-meta">Üyelik tarihi: {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long' }).format(new Date(profile.createdAtUtc))}</div>{message && <p className={`profile-message ${message.kind}`}>{message.text}</p>}<button className="profile-save" disabled={saving} type="submit">{saving ? 'Kaydediliyor…' : 'Değişiklikleri Kaydet'}</button></form></>
+      <div className="profile-meta">Üyelik tarihi: {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long' }).format(new Date(profile.createdAtUtc))}</div>{message && <p className={`profile-message ${message.kind}`}>{message.text}</p>}<button className="profile-save" disabled={saving} type="submit">{saving ? 'Kaydediliyor…' : 'Değişiklikleri Kaydet'}</button><button className="profile-logout" onClick={onLogout} type="button">Güvenli Çıkış Yap</button></form></>
 }
 
 function Campaigns({ back }: { back: () => void }) {
@@ -292,19 +292,28 @@ function Support({ craftsmanId, back }: { craftsmanId: string; back: () => void 
   return <><header className="page-header simple-header"><button onClick={back} type="button">‹</button><h1>Destek</h1><span>♧</span></header><form className="support-form" onSubmit={submit}><h2>Yeni destek talebi</h2><label>Kategori<select value={category} onChange={(event) => setCategory(event.target.value)}><option>Puan</option><option>Ürün Kodu</option><option>Ödül / Kupon</option><option>Hesap</option><option>Diğer</option></select></label><label>Konu<input value={subject} onChange={(event) => setSubject(event.target.value)} minLength={5} maxLength={140} required /></label><label>Açıklama<textarea value={description} onChange={(event) => setDescription(event.target.value)} minLength={10} maxLength={1500} required /></label>{message && <p>{message}</p>}<button disabled={saving} type="submit">{saving ? 'Gönderiliyor…' : 'Talebi Gönder'}</button></form><h2 className="request-title">Geçmiş talepler</h2><section className="request-list">{items.map((item) => <article key={item.id}><span>{item.category}</span><div><h3>{item.subject}</h3><small>{dateFormatter.format(new Date(item.createdAtUtc))}</small></div><b>{item.status === 'Open' ? 'Açık' : item.status === 'Resolved' ? 'Çözüldü' : 'İşlemde'}</b></article>)}</section></>
 }
 
+function Login({ onAuthenticated }: { onAuthenticated: (craftsmanId: string) => void }) {
+  const [phone, setPhone] = useState('05550000000'); const [challengeId, setChallengeId] = useState(''); const [code, setCode] = useState(''); const [developmentCode, setDevelopmentCode] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false)
+  async function requestCode(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await requestOtpCode(phone); setChallengeId(result.id); setDevelopmentCode(result.developmentCode ?? ''); setMessage('6 haneli doğrulama kodu gönderildi.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Kod gönderilemedi.') } finally { setBusy(false) } }
+  async function verify(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await verifyOtpCode(challengeId, code); onAuthenticated(result.craftsmanId) } catch (error) { setMessage(error instanceof Error ? error.message : 'Kod doğrulanamadı.') } finally { setBusy(false) } }
+  return <main className="login-shell"><div className="login-logo">⚒</div><span className="login-eyebrow">USTA KULÜBÜ</span><h1>Puanın, ödülün,<br />emeğinin karşılığı.</h1><p>Telefon numaranla güvenli ve kolayca giriş yap.</p>{!challengeId ? <form onSubmit={requestCode}><label>Telefon numarası<input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" placeholder="05xx xxx xx xx" required /></label><button disabled={busy} type="submit">{busy ? 'Gönderiliyor…' : 'SMS Kodu Gönder'}</button></form> : <form onSubmit={verify}><label>6 haneli kod<input className="otp-input" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" placeholder="••••••" required autoFocus /></label>{developmentCode && <small>Geliştirme kodu: <button onClick={() => setCode(developmentCode)} type="button">{developmentCode}</button></small>}<button disabled={busy || code.length !== 6} type="submit">{busy ? 'Kontrol ediliyor…' : 'Giriş Yap'}</button><button className="login-back" onClick={() => { setChallengeId(''); setCode(''); setMessage('') }} type="button">Numarayı değiştir</button></form>}{message && <div className="login-message">{message}</div>}<small className="login-legal">Devam ederek üyelik ve kişisel veri koşullarını kabul etmiş olursun.</small></main>
+}
+
 function App() {
+  const [craftsmanId, setCraftsmanId] = useState(() => localStorage.getItem('usta-craftsman-id') ?? '')
   const [screen, setScreen] = useState<Screen>('home')
   const [dashboard, setDashboard] = useState(fallbackDashboard)
   const [connected, setConnected] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
 
   useEffect(() => {
+    if (!craftsmanId) return
     const controller = new AbortController()
-    getDemoDashboard(controller.signal)
+    getCraftsmanDashboard(craftsmanId, controller.signal)
       .then((data) => { setDashboard(data); setConnected(true) })
       .catch(() => setConnected(false))
     return () => controller.abort()
-  }, [])
+  }, [craftsmanId])
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine)
@@ -313,10 +322,15 @@ function App() {
   }, [])
 
   async function refreshDashboard() {
-    const data = await getDemoDashboard()
+    const data = await getCraftsmanDashboard(craftsmanId)
     setDashboard(data)
     setConnected(true)
   }
+
+  function authenticated(id: string) { localStorage.setItem('usta-craftsman-id', id); setCraftsmanId(id) }
+  function logout() { localStorage.removeItem('usta-craftsman-id'); setCraftsmanId(''); setDashboard(fallbackDashboard); setScreen('home') }
+
+  if (!craftsmanId) return <Login onAuthenticated={authenticated} />
 
   return <main className="app-shell">
     <div className="status-bar"><strong>9:41</strong><span>▮▮ ◔ ▰</span></div>
@@ -328,7 +342,7 @@ function App() {
     {screen === 'coupons' && <Coupons craftsmanId={dashboard.craftsmanId} back={() => setScreen('home')} />}
     {screen === 'campaigns' && <Campaigns back={() => setScreen('home')} />}
     {screen === 'support' && <Support craftsmanId={dashboard.craftsmanId} back={() => setScreen('home')} />}
-    {screen === 'profile' && <Profile craftsmanId={dashboard.craftsmanId} onUpdated={refreshDashboard} />}
+    {screen === 'profile' && <Profile craftsmanId={dashboard.craftsmanId} onUpdated={refreshDashboard} onLogout={logout} />}
     <BottomNav screen={screen} setScreen={setScreen} />
   </main>
 }

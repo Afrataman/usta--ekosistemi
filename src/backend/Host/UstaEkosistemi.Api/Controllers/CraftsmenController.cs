@@ -78,6 +78,18 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : Con
         return profile is null ? NotFound(new { message = "Usta bulunamadı." }) : Ok(profile);
     }
 
+    [HttpGet("{id:guid}/dashboard")]
+    public async Task<IActionResult> GetDashboard(Guid id, CancellationToken cancellationToken)
+    {
+        var craftsman = await dbContext.Craftsmen.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.IsActive, cancellationToken);
+        if (craftsman is null) return NotFound(new { message = "Aktif usta bulunamadı." });
+        var balance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == id).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
+        var movements = await dbContext.PointLedgerEntries.AsNoTracking().Where(x => x.CraftsmanId == id).OrderByDescending(x => x.CreatedAtUtc).Take(3)
+            .Select(x => new { x.Description, x.CreatedAtUtc, x.Amount }).ToListAsync(cancellationToken);
+        var nextLevel = craftsman.Level == CraftsmanLevel.Bronze ? 5_000 : craftsman.Level == CraftsmanLevel.Silver ? 12_500 : balance;
+        return Ok(new { craftsmanId = craftsman.Id, craftsman.FullName, level = craftsman.Level.ToString(), balance, rewardValueTry = balance / 20, pointsToNextLevel = Math.Max(0, nextLevel - balance), movements });
+    }
+
     [HttpPut("{id:guid}/profile")]
     public async Task<IActionResult> UpdateProfile(Guid id, UpdateCraftsmanProfileRequest request, CancellationToken cancellationToken)
     {
