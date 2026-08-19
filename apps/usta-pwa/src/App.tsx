@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { createSupportRequest, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getRewardRedemptions, getRewards, getSupportRequests, getWallet, redeemProductCode, redeemReward, requestOtpCode, updateCraftsmanProfile, verifyOtpCode, type Campaign, type CraftsmanProfile, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
 import './App.css'
 
@@ -76,6 +76,37 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+  const [cameraState, setCameraState] = useState<'starting' | 'active' | 'unavailable'>('starting')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const scanningRef = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function startCamera() {
+      const Detector = (window as typeof window & { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector
+      if (!Detector || !navigator.mediaDevices?.getUserMedia) { setCameraState('unavailable'); return }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+        if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return }
+        streamRef.current = stream
+        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play() }
+        setCameraState('active')
+        const detector = new Detector({ formats: ['qr_code'] })
+        const scan = async () => {
+          if (cancelled || scanningRef.current || !videoRef.current) return
+          try {
+            const found = await detector.detect(videoRef.current)
+            if (found[0]?.rawValue) { scanningRef.current = true; setCode(found[0].rawValue.trim().toUpperCase()); setManualEntryOpen(true); setResult({ kind: 'success', message: 'QR kod okundu. Kodu kullanarak işlemi onaylayın.' }); return }
+          } catch { /* Kamera bir sonraki karede yeniden denenir. */ }
+          window.setTimeout(scan, 350)
+        }
+        void scan()
+      } catch { if (!cancelled) setCameraState('unavailable') }
+    }
+    void startCamera()
+    return () => { cancelled = true; streamRef.current?.getTracks().forEach((track) => track.stop()) }
+  }, [])
 
   async function submitCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -104,7 +135,10 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
       <p className="scan-instruction">Kodu çerçevenin içine hizalayın</p>
       <div className="camera-frame">
         <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
-        <div className="product-box"><div className="box-top" /><div className="qr-art">▦</div><small>||||||||||</small></div>
+        <video className={cameraState === 'active' ? 'camera-preview active' : 'camera-preview'} ref={videoRef} playsInline muted aria-label="QR kod kamerası" />
+        {cameraState !== 'active' && <div className="product-box"><div className="box-top" /><div className="qr-art">▦</div><small>||||||||||</small></div>}
+        {cameraState === 'starting' && <span className="camera-status">Kamera hazırlanıyor…</span>}
+        {cameraState === 'unavailable' && <span className="camera-status">Kamera kullanılamadı; kodu elle girebilirsiniz.</span>}
       </div>
       <button className="secondary-action scanner-manual" onClick={() => setManualEntryOpen((open) => !open)} type="button"><span>⌨</span>Kodu Elle Gir</button>
       {manualEntryOpen && <form className="manual-code-form" onSubmit={submitCode}>
