@@ -239,3 +239,9 @@ export async function reportDealerRisk(request: { referenceType: string; referen
   if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Şüpheli işlem bildirilemedi.')
   return body
 }
+
+export type AdminOverview = { craftsmen: number; dealers: number; activeCoupons: number; openRiskCases: number }
+export type AdminRiskCase = { id: string; referenceType: string; referenceValue: string; reason: string; description: string; status: 'Open' | 'InReview' | 'Resolved' | 'Rejected'; createdAtUtc: string; reviewedAtUtc: string | null; dealerEmployee: string; dealer: string }
+export async function getAdminOverview(): Promise<AdminOverview> { const response = await fetch(`${apiBaseUrl}/api/admin/overview`); if (!response.ok) throw new Error('Yönetici özeti alınamadı.'); return response.json() as Promise<AdminOverview> }
+export async function getAdminRiskCases(): Promise<AdminRiskCase[]> { const response = await fetch(`${apiBaseUrl}/api/admin/risk-cases`); if (!response.ok) throw new Error('Risk kayıtları alınamadı.'); return response.json() as Promise<AdminRiskCase[]> }
+export async function updateAdminRiskStatus(id: string, status: 'InReview' | 'Resolved' | 'Rejected'): Promise<void> { const response = await fetch(`${apiBaseUrl}/api/admin/risk-cases/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); if (!response.ok) throw new Error('Vaka durumu güncellenemedi.') }
