@@ -15,4 +15,7 @@ public sealed class LoyaltyPolicyTests
 
     [Fact]
     public void PointsToNextLevel_ReturnsZeroForGold() => Assert.Equal(0, LoyaltyPolicy.PointsToNextLevel(20_000));
+
+    [Fact]
+    public void GetLevel_UsesAdministratorThresholds() => Assert.Equal(CraftsmanLevel.Silver, LoyaltyPolicy.GetLevel(8_000, 7_500, 20_000));
 }

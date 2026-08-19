@@ -19,6 +19,8 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<DealerEmployee> DealerEmployees => Set<DealerEmployee>();
     public DbSet<RiskCase> RiskCases => Set<RiskCase>();
     public DbSet<RewardAuditEntry> RewardAuditEntries => Set<RewardAuditEntry>();
+    public DbSet<LoyaltyConfiguration> LoyaltyConfigurations => Set<LoyaltyConfiguration>();
+    public DbSet<LoyaltyConfigurationAudit> LoyaltyConfigurationAudits => Set<LoyaltyConfigurationAudit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -113,6 +115,16 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         modelBuilder.Entity<RewardAuditEntry>(entity =>
         {
             entity.ToTable("RewardAuditEntries"); entity.HasKey(x => x.Id); entity.Property(x => x.Action).HasMaxLength(40).IsRequired(); entity.Property(x => x.Details).HasMaxLength(600).IsRequired(); entity.HasIndex(x => new { x.RewardId, x.CreatedAtUtc }); entity.HasOne(x => x.Reward).WithMany().HasForeignKey(x => x.RewardId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LoyaltyConfiguration>(entity =>
+        {
+            entity.ToTable("LoyaltyConfigurations", table => { table.HasCheckConstraint("CK_LoyaltyConfiguration_Thresholds", "[SilverThreshold] > 0 AND [GoldThreshold] > [SilverThreshold]"); table.HasCheckConstraint("CK_LoyaltyConfiguration_ValueRate", "[PointsPerRewardTry] > 0"); }); entity.HasKey(x => x.Id);
+        });
+
+        modelBuilder.Entity<LoyaltyConfigurationAudit>(entity =>
+        {
+            entity.ToTable("LoyaltyConfigurationAudits"); entity.HasKey(x => x.Id); entity.Property(x => x.ChangeNote).HasMaxLength(300).IsRequired(); entity.HasIndex(x => x.CreatedAtUtc);
         });
 
         modelBuilder.Entity<Campaign>(entity =>

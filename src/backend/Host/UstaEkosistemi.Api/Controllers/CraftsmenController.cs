@@ -88,8 +88,9 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : Con
         var movements = await dbContext.PointLedgerEntries.AsNoTracking().Where(x => x.CraftsmanId == id).OrderByDescending(x => x.CreatedAtUtc).Take(3)
             .Select(x => new { x.Description, x.CreatedAtUtc, x.Amount }).ToListAsync(cancellationToken);
         var qualifyingPoints = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == id && x.Amount > 0).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
-        var level = LoyaltyPolicy.GetLevel(qualifyingPoints);
-        return Ok(new { craftsmanId = craftsman.Id, craftsman.FullName, level = level.ToString(), balance, rewardValueTry = balance / 20, pointsToNextLevel = LoyaltyPolicy.PointsToNextLevel(qualifyingPoints), movements });
+        var loyaltyConfig = await dbContext.LoyaltyConfigurations.AsNoTracking().SingleAsync(x => x.Id == LoyaltyConfiguration.DefaultId, cancellationToken);
+        var level = LoyaltyPolicy.GetLevel(qualifyingPoints, loyaltyConfig.SilverThreshold, loyaltyConfig.GoldThreshold);
+        return Ok(new { craftsmanId = craftsman.Id, craftsman.FullName, level = level.ToString(), balance, rewardValueTry = balance / loyaltyConfig.PointsPerRewardTry, pointsToNextLevel = LoyaltyPolicy.PointsToNextLevel(qualifyingPoints, loyaltyConfig.SilverThreshold, loyaltyConfig.GoldThreshold), movements });
     }
 
     [HttpPut("{id:guid}/profile")]

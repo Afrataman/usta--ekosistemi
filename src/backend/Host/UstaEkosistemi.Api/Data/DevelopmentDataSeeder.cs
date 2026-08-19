@@ -87,6 +87,11 @@ public static class DevelopmentDataSeeder
             dbContext.DealerEmployees.Add(new DealerEmployee { Id = DemoDealerEmployeeId, DealerId = DemoDealerId, FullName = "Demo Bayi Görevlisi" });
         }
 
+        if (!await dbContext.LoyaltyConfigurations.AnyAsync(x => x.Id == LoyaltyConfiguration.DefaultId, cancellationToken))
+        {
+            dbContext.LoyaltyConfigurations.Add(new LoyaltyConfiguration());
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 

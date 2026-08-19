@@ -4,20 +4,17 @@ namespace UstaEkosistemi.Api.Loyalty;
 
 public static class LoyaltyPolicy
 {
-    public const int SilverThreshold = 5_000;
-    public const int GoldThreshold = 12_500;
-
-    public static CraftsmanLevel GetLevel(int qualifyingPoints) => qualifyingPoints switch
+    public static CraftsmanLevel GetLevel(int qualifyingPoints, int silverThreshold = 5_000, int goldThreshold = 12_500) => qualifyingPoints switch
     {
-        >= GoldThreshold => CraftsmanLevel.Gold,
-        >= SilverThreshold => CraftsmanLevel.Silver,
+        var points when points >= goldThreshold => CraftsmanLevel.Gold,
+        var points when points >= silverThreshold => CraftsmanLevel.Silver,
         _ => CraftsmanLevel.Bronze
     };
 
-    public static int PointsToNextLevel(int qualifyingPoints) => GetLevel(qualifyingPoints) switch
+    public static int PointsToNextLevel(int qualifyingPoints, int silverThreshold = 5_000, int goldThreshold = 12_500) => GetLevel(qualifyingPoints, silverThreshold, goldThreshold) switch
     {
-        CraftsmanLevel.Bronze => SilverThreshold - qualifyingPoints,
-        CraftsmanLevel.Silver => GoldThreshold - qualifyingPoints,
+        CraftsmanLevel.Bronze => silverThreshold - qualifyingPoints,
+        CraftsmanLevel.Silver => goldThreshold - qualifyingPoints,
         _ => 0
     };
 }

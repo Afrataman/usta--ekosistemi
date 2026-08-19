@@ -64,7 +64,8 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
         };
         dbContext.PointLedgerEntries.Add(ledgerEntry);
         var qualifyingPoints = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == request.CraftsmanId && x.Amount > 0).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
-        craftsman.Level = LoyaltyPolicy.GetLevel(qualifyingPoints + earnedPoints);
+        var loyaltyConfig = await dbContext.LoyaltyConfigurations.AsNoTracking().SingleAsync(x => x.Id == LoyaltyConfiguration.DefaultId, cancellationToken);
+        craftsman.Level = LoyaltyPolicy.GetLevel(qualifyingPoints + earnedPoints, loyaltyConfig.SilverThreshold, loyaltyConfig.GoldThreshold);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
