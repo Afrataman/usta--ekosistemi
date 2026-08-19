@@ -232,3 +232,10 @@ export async function returnDealerProduct(code: string, reason: string): Promise
   if (!response.ok) throw new Error(body.message ?? body.detail ?? 'İade işlemi tamamlanamadı.')
   return body
 }
+
+export async function reportDealerRisk(request: { referenceType: string; referenceValue: string; reason: string; description: string }): Promise<{ id: string; status: string; createdAtUtc: string }> {
+  const response = await fetch(`${apiBaseUrl}/api/dealer/risk-cases`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealerEmployeeId: demoDealerEmployeeId, ...request }) })
+  const body = await response.json() as { id: string; status: string; createdAtUtc: string; message?: string; detail?: string }
+  if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Şüpheli işlem bildirilemedi.')
+  return body
+}

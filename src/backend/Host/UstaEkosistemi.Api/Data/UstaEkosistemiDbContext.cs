@@ -17,6 +17,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
     public DbSet<Dealer> Dealers => Set<Dealer>();
     public DbSet<DealerEmployee> DealerEmployees => Set<DealerEmployee>();
+    public DbSet<RiskCase> RiskCases => Set<RiskCase>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -101,6 +102,11 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         modelBuilder.Entity<DealerEmployee>(entity =>
         {
             entity.ToTable("DealerEmployees"); entity.HasKey(x => x.Id); entity.Property(x => x.FullName).HasMaxLength(120).IsRequired(); entity.HasIndex(x => new { x.DealerId, x.IsActive }); entity.HasOne(x => x.Dealer).WithMany(x => x.Employees).HasForeignKey(x => x.DealerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RiskCase>(entity =>
+        {
+            entity.ToTable("RiskCases"); entity.HasKey(x => x.Id); entity.Property(x => x.ReferenceType).HasMaxLength(30).IsRequired(); entity.Property(x => x.ReferenceValue).HasMaxLength(120).IsRequired(); entity.Property(x => x.Reason).HasMaxLength(80).IsRequired(); entity.Property(x => x.Description).HasMaxLength(1000).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20); entity.HasIndex(x => new { x.Status, x.CreatedAtUtc }); entity.HasOne(x => x.ReportedByDealerEmployee).WithMany().HasForeignKey(x => x.ReportedByDealerEmployeeId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Campaign>(entity =>
