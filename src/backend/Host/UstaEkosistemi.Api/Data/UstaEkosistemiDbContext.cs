@@ -21,6 +21,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<RewardAuditEntry> RewardAuditEntries => Set<RewardAuditEntry>();
     public DbSet<LoyaltyConfiguration> LoyaltyConfigurations => Set<LoyaltyConfiguration>();
     public DbSet<LoyaltyConfigurationAudit> LoyaltyConfigurationAudits => Set<LoyaltyConfigurationAudit>();
+    public DbSet<ReportExportAudit> ReportExportAudits => Set<ReportExportAudit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -157,6 +158,11 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.Property(x => x.CodeHash).HasMaxLength(100).IsRequired();
             entity.Property(x => x.CodeSalt).HasMaxLength(50).IsRequired();
             entity.HasIndex(x => new { x.PhoneNumber, x.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<ReportExportAudit>(entity =>
+        {
+            entity.ToTable("ReportExportAudits"); entity.HasKey(x => x.Id); entity.Property(x => x.ReportType).HasMaxLength(50).IsRequired(); entity.Property(x => x.Actor).HasMaxLength(120).IsRequired(); entity.HasIndex(x => x.CreatedAtUtc);
         });
     }
 }
