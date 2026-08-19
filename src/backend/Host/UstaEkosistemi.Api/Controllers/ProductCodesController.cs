@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
+using UstaEkosistemi.Api.Loyalty;
 using UstaEkosistemi.Api.Security;
 
 namespace UstaEkosistemi.Api.Controllers;
@@ -20,8 +21,8 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        var craftsmanExists = await dbContext.Craftsmen.AnyAsync(x => x.Id == request.CraftsmanId && x.IsActive, cancellationToken);
-        if (!craftsmanExists)
+        var craftsman = await dbContext.Craftsmen.SingleOrDefaultAsync(x => x.Id == request.CraftsmanId && x.IsActive, cancellationToken);
+        if (craftsman is null)
         {
             return NotFound(new { message = "Aktif usta bulunamadı." });
         }
@@ -49,16 +50,21 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
         productCode.RedeemedByCraftsmanId = request.CraftsmanId;
         productCode.RedeemedAtUtc = DateTimeOffset.UtcNow;
 
+        var now = DateTimeOffset.UtcNow;
+        var multiplier = await dbContext.Campaigns.Where(x => x.IsActive && x.StartsAtUtc <= now && x.EndsAtUtc >= now).MaxAsync(x => (decimal?)x.PointMultiplier, cancellationToken) ?? 1;
+        var earnedPoints = decimal.ToInt32(decimal.Floor(productCode.Product.BasePoints * Math.Max(1, multiplier)));
         var ledgerEntry = new PointLedgerEntry
         {
             CraftsmanId = request.CraftsmanId,
-            Amount = productCode.Product.BasePoints,
+            Amount = earnedPoints,
             TransactionType = PointTransactionType.ProductCodeEarned,
             ReferenceType = nameof(ProductCode),
             ReferenceId = productCode.Id,
-            Description = $"{productCode.Product.Name} ürün kodu puanı"
+            Description = multiplier > 1 ? $"{productCode.Product.Name} · {multiplier:0.##}X kampanya puanı" : $"{productCode.Product.Name} ürün kodu puanı"
         };
         dbContext.PointLedgerEntries.Add(ledgerEntry);
+        var qualifyingPoints = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == request.CraftsmanId && x.Amount > 0).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
+        craftsman.Level = LoyaltyPolicy.GetLevel(qualifyingPoints + earnedPoints);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -66,7 +72,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
             .Where(x => x.CraftsmanId == request.CraftsmanId)
             .SumAsync(x => x.Amount, cancellationToken);
 
-        return Ok(new { earnedPoints = ledgerEntry.Amount, balance, product = productCode.Product.Name, productCode.RedeemedAtUtc });
+        return Ok(new { earnedPoints = ledgerEntry.Amount, balance, product = productCode.Product.Name, campaignMultiplier = multiplier, level = craftsman.Level.ToString(), productCode.RedeemedAtUtc });
     }
 }
 

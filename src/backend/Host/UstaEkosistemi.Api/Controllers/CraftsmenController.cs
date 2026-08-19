@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
+using UstaEkosistemi.Api.Loyalty;
 
 namespace UstaEkosistemi.Api.Controllers;
 
@@ -86,8 +87,9 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : Con
         var balance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == id).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
         var movements = await dbContext.PointLedgerEntries.AsNoTracking().Where(x => x.CraftsmanId == id).OrderByDescending(x => x.CreatedAtUtc).Take(3)
             .Select(x => new { x.Description, x.CreatedAtUtc, x.Amount }).ToListAsync(cancellationToken);
-        var nextLevel = craftsman.Level == CraftsmanLevel.Bronze ? 5_000 : craftsman.Level == CraftsmanLevel.Silver ? 12_500 : balance;
-        return Ok(new { craftsmanId = craftsman.Id, craftsman.FullName, level = craftsman.Level.ToString(), balance, rewardValueTry = balance / 20, pointsToNextLevel = Math.Max(0, nextLevel - balance), movements });
+        var qualifyingPoints = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == id && x.Amount > 0).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
+        var level = LoyaltyPolicy.GetLevel(qualifyingPoints);
+        return Ok(new { craftsmanId = craftsman.Id, craftsman.FullName, level = level.ToString(), balance, rewardValueTry = balance / 20, pointsToNextLevel = LoyaltyPolicy.PointsToNextLevel(qualifyingPoints), movements });
     }
 
     [HttpPut("{id:guid}/profile")]
