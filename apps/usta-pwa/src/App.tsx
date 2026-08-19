@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { createSupportRequest, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getRewardRedemptions, getRewards, getSupportRequests, getWallet, redeemProductCode, redeemReward, requestOtpCode, updateCraftsmanProfile, verifyOtpCode, type Campaign, type CraftsmanProfile, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
 import './App.css'
 
-type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'campaigns' | 'support' | 'profile'
+type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'campaigns' | 'notifications' | 'support' | 'profile'
 
 const fallbackRewards: Reward[] = [
   { id: '1', name: 'Takım Çantası', description: '', pointCost: 2_500, imageKey: 'tool-bag', deliveryType: 'DealerPickup', stockQuantity: 40, isAvailable: true },
@@ -45,7 +45,7 @@ function BottomNav({ screen, setScreen }: { screen: Screen; setScreen: (screen: 
 function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dashboard: Dashboard; connected: boolean }) {
   return (
     <>
-      <header className="brand-header"><div className="brand"><span>⚒</span><strong>Usta Kulübü</strong></div><button aria-label="Bildirimler" type="button">♧</button></header>
+      <header className="brand-header"><div className="brand"><span>⚒</span><strong>Usta Kulübü</strong></div><button onClick={() => go('notifications')} aria-label="Bildirimler" type="button">♧<i className="notification-dot" /></button></header>
       <p className="hello">Merhaba {dashboard.fullName} 👋 <i className={connected ? 'api-dot connected' : 'api-dot'} title={connected ? 'SQL Server bağlantısı açık' : 'Örnek veriler gösteriliyor'} /></p>
 
       <section className="points-card">
@@ -318,6 +318,12 @@ function Campaigns({ back }: { back: () => void }) {
   return <><header className="page-header simple-header"><button onClick={back} type="button">‹</button><h1>Kampanyalar</h1><span>◇</span></header>{error && <p className="screen-error">{error}</p>}<section className="campaign-list">{items.map((item) => <article key={item.id}><div className="campaign-badge">{item.pointMultiplier > 1 ? `${item.pointMultiplier}X` : '★'}</div><div><span>AKTİF KAMPANYA</span><h2>{item.title}</h2><p>{item.summary}</p><small>{new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(item.endsAtUtc))} tarihine kadar</small></div></article>)}</section>{!error && items.length === 0 && <div className="coupon-state">Aktif kampanya bulunmuyor.</div>}</>
 }
 
+function Notifications({ back }: { back: () => void }) {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]); const [error, setError] = useState('')
+  useEffect(() => { const controller = new AbortController(); getCampaigns(controller.signal).then(setCampaigns).catch(() => setError('Bildirimler yüklenemedi.')); return () => controller.abort() }, [])
+  return <><header className="page-header simple-header"><button onClick={back} type="button">‹</button><h1>Bildirimler</h1><span>♧</span></header>{error && <p className="screen-error">{error}</p>}<section className="notification-list"><article><span>★</span><div><b>Usta Kulübü'ne hoş geldin</b><p>Ürün kodlarını okutarak puan kazanabilir, puanlarını ödüllerde kullanabilirsin.</p><small>Üyelik bildirimi</small></div></article>{campaigns.map((item) => <article key={item.id}><span>{item.pointMultiplier > 1 ? `${item.pointMultiplier}X` : '◇'}</span><div><b>{item.title}</b><p>{item.summary}</p><small>{new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(item.endsAtUtc))} tarihine kadar</small></div></article>)}</section>{!error && campaigns.length === 0 && <div className="coupon-state">Yeni kampanya bildirimi bulunmuyor.</div>}</>
+}
+
 function Support({ craftsmanId, back }: { craftsmanId: string; back: () => void }) {
   const [items, setItems] = useState<SupportItem[]>([]); const [subject, setSubject] = useState(''); const [description, setDescription] = useState(''); const [category, setCategory] = useState('Puan'); const [message, setMessage] = useState(''); const [saving, setSaving] = useState(false)
   async function load() { if (craftsmanId) setItems(await getSupportRequests(craftsmanId)) }
@@ -389,6 +395,7 @@ function App() {
     {screen === 'wallet' && <Wallet dashboard={dashboard} go={setScreen} />}
     {screen === 'coupons' && <Coupons craftsmanId={dashboard.craftsmanId} back={() => setScreen('home')} />}
     {screen === 'campaigns' && <Campaigns back={() => setScreen('home')} />}
+    {screen === 'notifications' && <Notifications back={() => setScreen('home')} />}
     {screen === 'support' && <Support craftsmanId={dashboard.craftsmanId} back={() => setScreen('home')} />}
     {screen === 'profile' && <Profile craftsmanId={dashboard.craftsmanId} onUpdated={refreshDashboard} onLogout={logout} />}
     <BottomNav screen={screen} setScreen={setScreen} />
