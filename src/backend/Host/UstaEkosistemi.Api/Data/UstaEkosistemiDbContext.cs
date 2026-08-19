@@ -45,6 +45,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.Property(x => x.CodeHash).HasMaxLength(64).IsFixedLength().IsRequired();
             entity.HasIndex(x => x.CodeHash).IsUnique();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.ReturnReason).HasMaxLength(240);
             entity.HasOne(x => x.Product).WithMany(x => x.Codes).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.RedeemedByCraftsman).WithMany().HasForeignKey(x => x.RedeemedByCraftsmanId).OnDelete(DeleteBehavior.Restrict);
         });

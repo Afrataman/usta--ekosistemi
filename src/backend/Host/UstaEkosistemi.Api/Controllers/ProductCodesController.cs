@@ -74,6 +74,43 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
 
         return Ok(new { earnedPoints = ledgerEntry.Amount, balance, product = productCode.Product.Name, campaignMultiplier = multiplier, level = craftsman.Level.ToString(), productCode.RedeemedAtUtc });
     }
+
+    [HttpPost("return")]
+    public async Task<IActionResult> Return(ReturnProductCodeRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Reason)) return ValidationProblem("Ürün kodu ve iade nedeni zorunludur.");
+        if (request.Reason.Trim().Length is < 3 or > 200) return ValidationProblem("İade nedeni 3 ile 200 karakter arasında olmalıdır.");
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var productCode = await dbContext.ProductCodes.Include(x => x.Product).SingleOrDefaultAsync(x => x.CodeHash == ProductCodeHasher.Hash(request.Code), cancellationToken);
+        if (productCode is null) return NotFound(new { message = "Ürün kodu bulunamadı." });
+        if (productCode.Status == ProductCodeStatus.Returned)
+        {
+            var existingReversal = await dbContext.PointLedgerEntries.AsNoTracking().SingleAsync(x => x.ReferenceType == nameof(ProductCode) && x.ReferenceId == productCode.Id && x.TransactionType == PointTransactionType.ReturnReversal, cancellationToken);
+            return Ok(new { alreadyProcessed = true, reversedPoints = -existingReversal.Amount, productCode.ReturnedAtUtc, productCode.ReturnReason });
+        }
+        if (productCode.Status != ProductCodeStatus.Redeemed || !productCode.RedeemedByCraftsmanId.HasValue) return Conflict(new { message = "Yalnızca kullanılmış ürün kodları iade edilebilir." });
+
+        var originalEntry = await dbContext.PointLedgerEntries.SingleAsync(x => x.ReferenceType == nameof(ProductCode) && x.ReferenceId == productCode.Id && x.TransactionType == PointTransactionType.ProductCodeEarned, cancellationToken);
+        var reason = request.Reason.Trim();
+        productCode.Status = ProductCodeStatus.Returned;
+        productCode.ReturnedAtUtc = DateTimeOffset.UtcNow;
+        productCode.ReturnReason = reason;
+        dbContext.PointLedgerEntries.Add(new PointLedgerEntry
+        {
+            CraftsmanId = productCode.RedeemedByCraftsmanId.Value,
+            Amount = -originalEntry.Amount,
+            TransactionType = PointTransactionType.ReturnReversal,
+            ReferenceType = nameof(ProductCode),
+            ReferenceId = productCode.Id,
+            Description = $"Ürün iadesi · {reason}"
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        var balance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == productCode.RedeemedByCraftsmanId.Value).SumAsync(x => x.Amount, cancellationToken);
+        return Ok(new { alreadyProcessed = false, reversedPoints = originalEntry.Amount, balance, product = productCode.Product.Name, productCode.ReturnedAtUtc });
+    }
 }
 
 public sealed record RedeemProductCodeRequest(Guid CraftsmanId, string Code);
+public sealed record ReturnProductCodeRequest(string Code, string Reason);

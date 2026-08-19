@@ -8,6 +8,8 @@ public sealed class ProductCode
     public ProductCodeStatus Status { get; set; } = ProductCodeStatus.Available;
     public Guid? RedeemedByCraftsmanId { get; set; }
     public DateTimeOffset? RedeemedAtUtc { get; set; }
+    public DateTimeOffset? ReturnedAtUtc { get; set; }
+    public string? ReturnReason { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public Product Product { get; set; } = null!;
     public Craftsman? RedeemedByCraftsman { get; set; }
@@ -17,5 +19,6 @@ public enum ProductCodeStatus
 {
     Available,
     Redeemed,
+    Returned,
     Cancelled
 }
