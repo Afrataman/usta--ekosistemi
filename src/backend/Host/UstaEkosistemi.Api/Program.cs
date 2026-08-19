@@ -20,6 +20,8 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseCors("DevelopmentPwa");
+    await using var scope = app.Services.CreateAsyncScope();
+    await DevelopmentDataSeeder.EnsureCreatedAsync(scope.ServiceProvider.GetRequiredService<UstaEkosistemiDbContext>(), CancellationToken.None);
 }
 
 if (!app.Environment.IsDevelopment())

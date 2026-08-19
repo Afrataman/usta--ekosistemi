@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { createSupportRequest, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getRewardRedemptions, getRewards, getSupportRequests, getWallet, redeemProductCode, redeemReward, requestOtpCode, updateCraftsmanProfile, verifyOtpCode, type Campaign, type CraftsmanProfile, type Dashboard, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
+import { createSupportRequest, fulfillDealerCoupon, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getRewardRedemptions, getRewards, getSupportRequests, getWallet, redeemProductCode, redeemReward, requestOtpCode, updateCraftsmanProfile, verifyDealerCoupon, verifyOtpCode, type Campaign, type CraftsmanProfile, type Dashboard, type DealerCoupon, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
 import './App.css'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'campaigns' | 'notifications' | 'support' | 'profile'
@@ -350,7 +350,15 @@ function ProfileSetup({ craftsmanId, onCompleted }: { craftsmanId: string; onCom
   return <main className="login-shell setup-shell"><div className="login-logo">✓</div><span className="login-eyebrow">SON BİR ADIM</span><h1>Seni tanıyalım,<br />kulübe hoş geldin.</h1><p>Ödül ve kampanyaları sana uygun gösterebilmemiz için kısa profilini tamamla.</p><form onSubmit={submit}><label>Ad soyad<input value={fullName} onChange={(event) => setFullName(event.target.value)} minLength={3} maxLength={120} placeholder="Adınız ve soyadınız" required autoFocus /></label><label>Şehir<input value={city} onChange={(event) => setCity(event.target.value)} maxLength={80} placeholder="Örn. Yalova" /></label>{message && <div className="login-message">{message}</div>}<button disabled={saving} type="submit">{saving ? 'Kaydediliyor…' : 'Kulübe Katıl'}</button></form><small className="login-legal">Bilgilerini daha sonra Profil ekranından değiştirebilirsin.</small></main>
 }
 
-function App() {
+function DealerApp() {
+  const [code, setCode] = useState(''); const [coupon, setCoupon] = useState<DealerCoupon | null>(null); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false)
+  async function verify(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setMessage(''); setCoupon(null); try { setCoupon(await verifyDealerCoupon(code.trim().toUpperCase())) } catch (error) { setMessage(error instanceof Error ? error.message : 'Kupon doğrulanamadı.') } finally { setBusy(false) } }
+  async function fulfill() { setBusy(true); setMessage(''); try { const result = await fulfillDealerCoupon(code.trim().toUpperCase()); setCoupon(result); setMessage(result.alreadyProcessed ? 'Bu teslim daha önce onaylanmış.' : 'Ödül teslimi başarıyla onaylandı.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Teslim onaylanamadı.') } finally { setBusy(false) } }
+  const expired = coupon?.expiresAtUtc ? new Date(coupon.expiresAtUtc) <= new Date() : false
+  return <main className="dealer-shell"><header><div><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Bayi Paneli</strong></div></div><i>Yalova Merkez Bayi</i></header><section className="dealer-hero"><span>▦</span><h1>Kupon Doğrula</h1><p>Ustanın kupon kodunu girerek ödül bilgilerini kontrol edin. Doğrulama işlemi kuponu tüketmez.</p></section><form className="dealer-search" onSubmit={verify}><label>Kupon kodu</label><div><input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="UK-XXXXXXXXXXXX" minLength={6} required autoFocus /><button disabled={busy} type="submit">{busy ? 'Kontrol…' : 'Doğrula'}</button></div></form>{message && <p className="dealer-message">{message}</p>}{coupon && <section className="dealer-coupon"><div className={`dealer-validity ${coupon.status === 'Created' && !expired ? 'valid' : ''}`}><span>{coupon.status === 'Created' && !expired ? '✓' : '!'}</span><div><b>{coupon.status === 'Created' && !expired ? 'Kupon geçerli' : coupon.status === 'Fulfilled' ? 'Kupon kullanılmış' : 'Kupon kullanılamaz'}</b><small>{coupon.fulfillmentCode}</small></div></div><dl><div><dt>Ödül</dt><dd>{coupon.reward}</dd></div><div><dt>Usta</dt><dd>{coupon.craftsman}</dd></div><div><dt>Son kullanım</dt><dd>{coupon.expiresAtUtc ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(coupon.expiresAtUtc)) : 'Süresiz'}</dd></div></dl><button className="dealer-fulfill" onClick={fulfill} disabled={busy || coupon.status !== 'Created' || expired} type="button">{coupon.status === 'Fulfilled' ? 'Teslim Edilmiş' : 'Teslimi Onayla'}</button><small className="dealer-warning">Teslim onayı geri alınamaz. Ödülü ustaya verdikten sonra onaylayın.</small></section>}<footer><a href="/">Usta uygulamasına dön</a><span>Demo Bayi Görevlisi</span></footer></main>
+}
+
+function CraftsmanApp() {
   const [craftsmanId, setCraftsmanId] = useState(() => localStorage.getItem('usta-craftsman-id') ?? '')
   const [needsProfile, setNeedsProfile] = useState(() => localStorage.getItem('usta-needs-profile') === 'true')
   const [screen, setScreen] = useState<Screen>('home')
@@ -401,5 +409,7 @@ function App() {
     <BottomNav screen={screen} setScreen={setScreen} />
   </main>
 }
+
+function App() { return window.location.pathname.startsWith('/dealer') ? <DealerApp /> : <CraftsmanApp /> }
 
 export default App

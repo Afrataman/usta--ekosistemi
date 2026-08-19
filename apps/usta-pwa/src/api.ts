@@ -207,3 +207,20 @@ export async function redeemProductCode(craftsmanId: string, code: string): Prom
 
   return response.json() as Promise<RedeemResult>
 }
+
+export type DealerCoupon = { id: string; fulfillmentCode: string; reward: string; craftsman: string; status: 'Created' | 'Fulfilled' | 'Cancelled'; expiresAtUtc: string | null; fulfilledAtUtc: string | null; fulfilledByDealerEmployeeId: string | null; alreadyProcessed: boolean }
+const demoDealerEmployeeId = '77777777-7777-7777-7777-777777777772'
+
+export async function verifyDealerCoupon(code: string): Promise<DealerCoupon> {
+  const response = await fetch(`${apiBaseUrl}/api/dealer/coupons/${encodeURIComponent(code)}?dealerEmployeeId=${demoDealerEmployeeId}`)
+  const body = await response.json() as DealerCoupon & { message?: string }
+  if (!response.ok) throw new Error(body.message ?? 'Kupon doğrulanamadı.')
+  return body
+}
+
+export async function fulfillDealerCoupon(code: string): Promise<DealerCoupon> {
+  const response = await fetch(`${apiBaseUrl}/api/dealer/coupons/${encodeURIComponent(code)}/fulfill`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealerEmployeeId: demoDealerEmployeeId }) })
+  const body = await response.json() as DealerCoupon & { message?: string }
+  if (!response.ok) throw new Error(body.message ?? 'Teslim onaylanamadı.')
+  return body
+}
