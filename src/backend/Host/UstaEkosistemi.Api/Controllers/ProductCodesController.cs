@@ -78,10 +78,11 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
     [HttpPost("return")]
     public async Task<IActionResult> Return(ReturnProductCodeRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Reason)) return ValidationProblem("Ürün kodu ve iade nedeni zorunludur.");
+        if (request.DealerEmployeeId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Reason)) return ValidationProblem("Bayi çalışanı, ürün kodu ve iade nedeni zorunludur.");
         if (request.Reason.Trim().Length is < 3 or > 200) return ValidationProblem("İade nedeni 3 ile 200 karakter arasında olmalıdır.");
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        if (!await dbContext.DealerEmployees.AnyAsync(x => x.Id == request.DealerEmployeeId && x.IsActive && x.Dealer.IsActive, cancellationToken)) return Unauthorized(new { message = "Yetkili bayi çalışanı bulunamadı." });
         var productCode = await dbContext.ProductCodes.Include(x => x.Product).SingleOrDefaultAsync(x => x.CodeHash == ProductCodeHasher.Hash(request.Code), cancellationToken);
         if (productCode is null) return NotFound(new { message = "Ürün kodu bulunamadı." });
         if (productCode.Status == ProductCodeStatus.Returned)
@@ -96,6 +97,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
         productCode.Status = ProductCodeStatus.Returned;
         productCode.ReturnedAtUtc = DateTimeOffset.UtcNow;
         productCode.ReturnReason = reason;
+        productCode.ReturnedByDealerEmployeeId = request.DealerEmployeeId;
         dbContext.PointLedgerEntries.Add(new PointLedgerEntry
         {
             CraftsmanId = productCode.RedeemedByCraftsmanId.Value,
@@ -113,4 +115,4 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
 }
 
 public sealed record RedeemProductCodeRequest(Guid CraftsmanId, string Code);
-public sealed record ReturnProductCodeRequest(string Code, string Reason);
+public sealed record ReturnProductCodeRequest(Guid DealerEmployeeId, string Code, string Reason);

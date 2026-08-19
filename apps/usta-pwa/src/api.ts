@@ -224,3 +224,11 @@ export async function fulfillDealerCoupon(code: string): Promise<DealerCoupon> {
   if (!response.ok) throw new Error(body.message ?? 'Teslim onaylanamadı.')
   return body
 }
+
+export type ProductReturnResult = { alreadyProcessed: boolean; reversedPoints: number; balance?: number; product?: string; returnedAtUtc: string; returnReason?: string }
+export async function returnDealerProduct(code: string, reason: string): Promise<ProductReturnResult> {
+  const response = await fetch(`${apiBaseUrl}/api/product-codes/return`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealerEmployeeId: demoDealerEmployeeId, code, reason }) })
+  const body = await response.json() as ProductReturnResult & { message?: string; detail?: string }
+  if (!response.ok) throw new Error(body.message ?? body.detail ?? 'İade işlemi tamamlanamadı.')
+  return body
+}

@@ -10,9 +10,11 @@ public sealed class ProductCode
     public DateTimeOffset? RedeemedAtUtc { get; set; }
     public DateTimeOffset? ReturnedAtUtc { get; set; }
     public string? ReturnReason { get; set; }
+    public Guid? ReturnedByDealerEmployeeId { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public Product Product { get; set; } = null!;
     public Craftsman? RedeemedByCraftsman { get; set; }
+    public DealerEmployee? ReturnedByDealerEmployee { get; set; }
 }
 
 public enum ProductCodeStatus

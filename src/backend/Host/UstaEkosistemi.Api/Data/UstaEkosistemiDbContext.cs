@@ -50,6 +50,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.Property(x => x.ReturnReason).HasMaxLength(240);
             entity.HasOne(x => x.Product).WithMany(x => x.Codes).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.RedeemedByCraftsman).WithMany().HasForeignKey(x => x.RedeemedByCraftsmanId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReturnedByDealerEmployee).WithMany().HasForeignKey(x => x.ReturnedByDealerEmployeeId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PointLedgerEntry>(entity =>
