@@ -14,6 +14,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
+    public DbSet<SupportResponse> SupportResponses => Set<SupportResponse>();
     public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
     public DbSet<Dealer> Dealers => Set<Dealer>();
     public DbSet<DealerEmployee> DealerEmployees => Set<DealerEmployee>();
@@ -146,8 +147,15 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.Property(x => x.Subject).HasMaxLength(140).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1500).IsRequired();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.Priority).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.AssignedTo).HasMaxLength(120);
             entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc });
             entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SupportResponse>(entity =>
+        {
+            entity.ToTable("SupportResponses"); entity.HasKey(x => x.Id); entity.Property(x => x.Author).HasMaxLength(120).IsRequired(); entity.Property(x => x.Message).HasMaxLength(1500).IsRequired(); entity.HasIndex(x => new { x.SupportRequestId, x.CreatedAtUtc }); entity.HasOne(x => x.SupportRequest).WithMany(x => x.Responses).HasForeignKey(x => x.SupportRequestId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<OtpChallenge>(entity =>

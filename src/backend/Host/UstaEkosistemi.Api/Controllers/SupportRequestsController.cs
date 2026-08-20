@@ -13,7 +13,7 @@ public sealed class SupportRequestsController(UstaEkosistemiDbContext dbContext)
     public async Task<IActionResult> GetMine(Guid craftsmanId, CancellationToken cancellationToken) => Ok(
         await dbContext.SupportRequests.AsNoTracking().Where(x => x.CraftsmanId == craftsmanId)
             .OrderByDescending(x => x.CreatedAtUtc)
-            .Select(x => new { x.Id, x.Category, x.Subject, x.Description, status = x.Status.ToString(), x.CreatedAtUtc, x.ResolvedAtUtc })
+            .Select(x => new { x.Id, x.Category, x.Subject, x.Description, status = x.Status.ToString(), priority = x.Priority.ToString(), x.CreatedAtUtc, x.UpdatedAtUtc, x.ResolvedAtUtc, responses = x.Responses.OrderBy(r => r.CreatedAtUtc).Select(r => new { r.Id, r.Author, r.Message, r.CreatedAtUtc }) })
             .ToListAsync(cancellationToken));
 
     [HttpPost]
