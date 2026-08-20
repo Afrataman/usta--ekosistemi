@@ -5,6 +5,7 @@ public sealed class RewardRedemption
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid CraftsmanId { get; set; }
     public Guid RewardId { get; set; }
+    public Guid? RedemptionRequestId { get; set; }
     public int PointsSpent { get; set; }
     public RewardRedemptionStatus Status { get; set; } = RewardRedemptionStatus.Created;
     public required string FulfillmentCode { get; set; }

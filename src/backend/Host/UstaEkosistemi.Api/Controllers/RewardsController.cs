@@ -40,12 +40,20 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
     [HttpPost("{rewardId:guid}/redeem")]
     public async Task<IActionResult> Redeem(Guid rewardId, RedeemRewardRequest request, CancellationToken cancellationToken)
     {
+        if (request.RequestId == Guid.Empty) return ValidationProblem("Ödül işlem anahtarı zorunludur.");
         var authorization = Request.Headers.Authorization.ToString();
         if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return Unauthorized(new { message = "Usta oturumu zorunludur." });
         var hash = CraftsmanSessionSecurity.HashToken(authorization[7..].Trim()); var now = DateTimeOffset.UtcNow;
         var authenticatedId = await dbContext.CraftsmanSessions.Where(x => x.TokenHash == hash && x.RevokedAtUtc == null && x.ExpiresAtUtc > now && x.Craftsman.IsActive).Select(x => (Guid?)x.CraftsmanId).SingleOrDefaultAsync(cancellationToken);
         if (authenticatedId != request.CraftsmanId) return Unauthorized(new { message = "Usta oturumu hesapla eşleşmiyor." });
         await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var existing = await dbContext.RewardRedemptions.Include(x => x.Reward).SingleOrDefaultAsync(x => x.RedemptionRequestId == request.RequestId, cancellationToken);
+        if (existing is not null)
+        {
+            if (existing.CraftsmanId != request.CraftsmanId || existing.RewardId != rewardId) return Conflict(new { message = "İşlem anahtarı başka bir ödül işleminde kullanılmış." });
+            var existingBalance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == request.CraftsmanId).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
+            return Ok(ToResult(existing, existing.Reward, existingBalance, true));
+        }
         var craftsmanExists = await dbContext.Craftsmen.AnyAsync(x => x.Id == request.CraftsmanId && x.IsActive, cancellationToken);
         if (!craftsmanExists)
         {
@@ -75,9 +83,12 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
         {
             CraftsmanId = request.CraftsmanId,
             RewardId = reward.Id,
+            RedemptionRequestId = request.RequestId,
             PointsSpent = reward.PointCost,
             FulfillmentCode = $"UK-{Guid.NewGuid():N}"[..15].ToUpperInvariant(),
-            ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30)
+            Status = reward.DeliveryType == RewardDeliveryType.Digital ? RewardRedemptionStatus.Fulfilled : RewardRedemptionStatus.Created,
+            ExpiresAtUtc = reward.DeliveryType == RewardDeliveryType.Digital ? null : DateTimeOffset.UtcNow.AddDays(30),
+            FulfilledAtUtc = reward.DeliveryType == RewardDeliveryType.Digital ? DateTimeOffset.UtcNow : null
         };
         dbContext.RewardRedemptions.Add(redemption);
         dbContext.PointLedgerEntries.Add(new PointLedgerEntry
@@ -89,7 +100,8 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
             ReferenceId = redemption.Id,
             Description = $"{reward.Name} ödülü"
         });
-        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = request.CraftsmanId, Type = "Reward", Title = "Ödülünüz hazır", Message = $"{reward.Name} için {reward.PointCost:N0} puan kullanıldı. Teslim kodunuz Kuponlar ekranında.", ReferenceType = nameof(RewardRedemption), ReferenceId = redemption.Id });
+        var deliveryMessage = reward.DeliveryType == RewardDeliveryType.Digital ? "Dijital ödül kodunuz anında teslim edildi ve Kuponlar ekranına kaydedildi." : "Bayiden teslim kodunuz Kuponlar ekranında hazır.";
+        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = request.CraftsmanId, Type = "Reward", Title = "Ödülünüz hazır", Message = $"{reward.Name} için {reward.PointCost:N0} puan kullanıldı. {deliveryMessage}", ReferenceType = nameof(RewardRedemption), ReferenceId = redemption.Id });
         if (reward.StockQuantity.HasValue)
         {
             reward.StockQuantity--;
@@ -98,16 +110,15 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return Ok(new
-        {
-            redemption.Id,
-            reward = reward.Name,
-            redemption.PointsSpent,
-            redemption.FulfillmentCode,
-            deliveryType = reward.DeliveryType.ToString(),
-            balance = balance - reward.PointCost
-        });
+        return Ok(ToResult(redemption, reward, balance - reward.PointCost, false));
     }
+
+    private static object ToResult(RewardRedemption redemption, Reward reward, int balance, bool alreadyProcessed) => new
+    {
+        redemption.Id, reward = reward.Name, redemption.PointsSpent, redemption.FulfillmentCode,
+        deliveryType = reward.DeliveryType.ToString(), status = redemption.Status.ToString(),
+        redemption.FulfilledAtUtc, balance, alreadyProcessed
+    };
 }
 
-public sealed record RedeemRewardRequest(Guid CraftsmanId);
+public sealed record RedeemRewardRequest(Guid CraftsmanId, Guid RequestId);

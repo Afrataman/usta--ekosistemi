@@ -185,6 +185,7 @@ function Rewards({ balance, craftsmanId, onBalanceChanged }: { balance: number; 
   const [connected, setConnected] = useState(false)
   const [catalogVersion, setCatalogVersion] = useState(0)
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null)
+  const [redemptionRequestId, setRedemptionRequestId] = useState('')
   const [redemption, setRedemption] = useState<RewardRedemptionResult | null>(null)
   const [redemptionError, setRedemptionError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -205,7 +206,7 @@ function Rewards({ balance, craftsmanId, onBalanceChanged }: { balance: number; 
     setSubmitting(true)
     setRedemptionError('')
     try {
-      const response = await redeemReward(selectedReward.id, craftsmanId)
+      const response = await redeemReward(selectedReward.id, craftsmanId, redemptionRequestId)
       setRedemption(response)
       setSelectedReward(null)
       setCatalogVersion((version) => version + 1)
@@ -224,7 +225,7 @@ function Rewards({ balance, craftsmanId, onBalanceChanged }: { balance: number; 
       <div className={connected ? 'catalog-source connected' : 'catalog-source'}>{connected ? 'Canlı katalog' : 'Örnek katalog'}</div>
       <div className="rewards-grid">
         {catalog.map((reward) => <article className="reward-product" key={reward.id} title={reward.description}>
-          {reward.deliveryType === 'DealerPickup' && <span className="delivery">Bayiden Teslim</span>}<div className="product-art">{rewardArt[reward.imageKey] ?? '🎁'}</div><h2>{reward.name}</h2><p>{numberFormatter.format(reward.pointCost)} puan</p><button onClick={() => { setSelectedReward(reward); setRedemption(null); setRedemptionError('') }} disabled={!reward.isAvailable || balance < reward.pointCost || !craftsmanId} type="button">{!reward.isAvailable ? 'Stokta Yok' : balance < reward.pointCost ? 'Puan Yetersiz' : reward.deliveryType === 'Digital' ? 'İncele' : 'Ödülü Al'}</button>
+          {reward.deliveryType === 'DealerPickup' && <span className="delivery">Bayiden Teslim</span>}<div className="product-art">{rewardArt[reward.imageKey] ?? '🎁'}</div><h2>{reward.name}</h2><p>{numberFormatter.format(reward.pointCost)} puan</p><button onClick={() => { setSelectedReward(reward); setRedemptionRequestId(crypto.randomUUID()); setRedemption(null); setRedemptionError('') }} disabled={!reward.isAvailable || balance < reward.pointCost || !craftsmanId} type="button">{!reward.isAvailable ? 'Stokta Yok' : balance < reward.pointCost ? 'Puan Yetersiz' : reward.deliveryType === 'Digital' ? 'İncele' : 'Ödülü Al'}</button>
         </article>)}
       </div>
       <div className="points-note">ⓘ <span>Puanlar nakit değildir; yalnızca program ödüllerinde kullanılır.</span></div>
@@ -298,9 +299,9 @@ function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void 
     {loading && <div className="coupon-state">Kuponlar yükleniyor…</div>}
     {error && <div className="coupon-state error">{error}</div>}
     {!loading && !error && items.length === 0 && <div className="coupon-empty"><span>▰</span><h2>Henüz kuponun yok</h2><p>Ödül kataloğundan bir ödül aldığında teslim kodun burada saklanır.</p></div>}
-    <section className="coupon-list">{items.map((item) => <article className={item.status === 'Created' ? 'coupon-card' : 'coupon-card inactive'} key={item.id}>
-      <div className="coupon-art">{rewardArt[item.imageKey] ?? '🎁'}</div><div className="coupon-main"><div className="coupon-name"><h2>{item.rewardName}</h2><span>{item.status === 'Created' ? 'Aktif' : item.status === 'Fulfilled' ? 'Kullanıldı' : 'İptal'}</span></div><p>{item.deliveryType === 'Digital' ? 'Dijital ödül kodu' : 'Bayiden teslim kodu'} · {numberFormatter.format(item.pointsSpent)} puan</p><code>{item.fulfillmentCode}</code><small>Oluşturulma: {dateFormatter.format(new Date(item.createdAtUtc))}</small></div>
-      <button onClick={() => copyCode(item)} disabled={item.status !== 'Created'} type="button">{copiedId === item.id ? 'Kopyalandı' : 'Kopyala'}</button>
+    <section className="coupon-list">{items.map((item) => <article className={item.status === 'Created' || item.deliveryType === 'Digital' ? 'coupon-card' : 'coupon-card inactive'} key={item.id}>
+      <div className="coupon-art">{rewardArt[item.imageKey] ?? '🎁'}</div><div className="coupon-main"><div className="coupon-name"><h2>{item.rewardName}</h2><span>{item.deliveryType === 'Digital' && item.status === 'Fulfilled' ? 'Teslim Edildi' : item.status === 'Created' ? 'Aktif' : item.status === 'Fulfilled' ? 'Kullanıldı' : 'İptal'}</span></div><p>{item.deliveryType === 'Digital' ? 'Dijital ödül kodu' : 'Bayiden teslim kodu'} · {numberFormatter.format(item.pointsSpent)} puan</p><code>{item.fulfillmentCode}</code><small>Oluşturulma: {dateFormatter.format(new Date(item.createdAtUtc))}</small></div>
+      <button onClick={() => copyCode(item)} disabled={item.status !== 'Created' && item.deliveryType !== 'Digital'} type="button">{copiedId === item.id ? 'Kopyalandı' : 'Kopyala'}</button>
     </article>)}</section>
     <div className="wallet-info">ⓘ <span>Bayiden teslim ödüllerinde bu kodu bayi görevlisine göster. Kodu tanımadığın kişilerle paylaşma.</span></div>
   </>

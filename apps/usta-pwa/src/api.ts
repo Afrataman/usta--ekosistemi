@@ -108,6 +108,9 @@ export type RewardRedemptionResult = {
   pointsSpent: number
   fulfillmentCode: string
   deliveryType: Reward['deliveryType']
+  status: 'Created' | 'Fulfilled'
+  fulfilledAtUtc: string | null
+  alreadyProcessed: boolean
   balance: number
 }
 
@@ -200,11 +203,11 @@ export async function getRewardRedemptions(craftsmanId: string, signal?: AbortSi
   return response.json() as Promise<RewardRedemption[]>
 }
 
-export async function redeemReward(rewardId: string, craftsmanId: string): Promise<RewardRedemptionResult> {
+export async function redeemReward(rewardId: string, craftsmanId: string, requestId: string): Promise<RewardRedemptionResult> {
   const response = await craftsmanFetch(`${apiBaseUrl}/api/rewards/${rewardId}/redeem`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ craftsmanId }),
+    body: JSON.stringify({ craftsmanId, requestId }),
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { message?: string } | null

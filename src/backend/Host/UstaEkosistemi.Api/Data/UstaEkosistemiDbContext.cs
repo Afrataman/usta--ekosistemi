@@ -101,6 +101,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.Property(x => x.FulfillmentCode).HasMaxLength(30).IsRequired();
             entity.HasIndex(x => x.FulfillmentCode).IsUnique();
+            entity.HasIndex(x => x.RedemptionRequestId).IsUnique().HasFilter("[RedemptionRequestId] IS NOT NULL");
             entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc });
             entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Reward).WithMany().HasForeignKey(x => x.RewardId).OnDelete(DeleteBehavior.Restrict);
