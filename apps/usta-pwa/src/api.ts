@@ -211,17 +211,20 @@ export async function redeemProductCode(craftsmanId: string, code: string, reque
 }
 
 export type DealerCoupon = { id: string; fulfillmentCode: string; reward: string; craftsman: string; status: 'Created' | 'Fulfilled' | 'Cancelled'; expiresAtUtc: string | null; fulfilledAtUtc: string | null; fulfilledByDealerEmployeeId: string | null; alreadyProcessed: boolean }
-const demoDealerEmployeeId = '77777777-7777-7777-7777-777777777772'
+const dealerHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('dealer-token') ?? ''}` })
+export type DealerLoginResult = { token: string; expiresAtUtc: string; employee: string; dealer: string }
+export async function loginDealer(dealerCode: string, pin: string): Promise<DealerLoginResult> { const response = await fetch(`${apiBaseUrl}/api/dealer/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealerCode, pin }) }); const body = await response.json() as DealerLoginResult & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Bayi girişi başarısız.'); return body }
+export async function logoutDealer(): Promise<void> { await fetch(`${apiBaseUrl}/api/dealer/auth/logout`, { method: 'POST', headers: dealerHeaders() }); sessionStorage.removeItem('dealer-token'); sessionStorage.removeItem('dealer-profile') }
 
 export async function verifyDealerCoupon(code: string): Promise<DealerCoupon> {
-  const response = await fetch(`${apiBaseUrl}/api/dealer/coupons/${encodeURIComponent(code)}?dealerEmployeeId=${demoDealerEmployeeId}`)
+  const response = await fetch(`${apiBaseUrl}/api/dealer/coupons/${encodeURIComponent(code)}`, { headers: dealerHeaders() })
   const body = await response.json() as DealerCoupon & { message?: string }
   if (!response.ok) throw new Error(body.message ?? 'Kupon doğrulanamadı.')
   return body
 }
 
 export async function fulfillDealerCoupon(code: string): Promise<DealerCoupon> {
-  const response = await fetch(`${apiBaseUrl}/api/dealer/coupons/${encodeURIComponent(code)}/fulfill`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealerEmployeeId: demoDealerEmployeeId }) })
+  const response = await fetch(`${apiBaseUrl}/api/dealer/coupons/${encodeURIComponent(code)}/fulfill`, { method: 'POST', headers: dealerHeaders() })
   const body = await response.json() as DealerCoupon & { message?: string }
   if (!response.ok) throw new Error(body.message ?? 'Teslim onaylanamadı.')
   return body
@@ -229,14 +232,14 @@ export async function fulfillDealerCoupon(code: string): Promise<DealerCoupon> {
 
 export type ProductReturnResult = { alreadyProcessed: boolean; reversedPoints: number; balance?: number; product?: string; returnedAtUtc: string; returnReason?: string }
 export async function returnDealerProduct(code: string, reason: string): Promise<ProductReturnResult> {
-  const response = await fetch(`${apiBaseUrl}/api/product-codes/return`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealerEmployeeId: demoDealerEmployeeId, code, reason }) })
+  const response = await fetch(`${apiBaseUrl}/api/product-codes/return`, { method: 'POST', headers: dealerHeaders(), body: JSON.stringify({ code, reason }) })
   const body = await response.json() as ProductReturnResult & { message?: string; detail?: string }
   if (!response.ok) throw new Error(body.message ?? body.detail ?? 'İade işlemi tamamlanamadı.')
   return body
 }
 
 export async function reportDealerRisk(request: { referenceType: string; referenceValue: string; reason: string; description: string }): Promise<{ id: string; status: string; createdAtUtc: string }> {
-  const response = await fetch(`${apiBaseUrl}/api/dealer/risk-cases`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealerEmployeeId: demoDealerEmployeeId, ...request }) })
+  const response = await fetch(`${apiBaseUrl}/api/dealer/risk-cases`, { method: 'POST', headers: dealerHeaders(), body: JSON.stringify(request) })
   const body = await response.json() as { id: string; status: string; createdAtUtc: string; message?: string; detail?: string }
   if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Şüpheli işlem bildirilemedi.')
   return body

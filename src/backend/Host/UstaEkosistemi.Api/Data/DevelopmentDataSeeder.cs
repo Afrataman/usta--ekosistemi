@@ -87,6 +87,9 @@ public static class DevelopmentDataSeeder
             dbContext.DealerEmployees.Add(new DealerEmployee { Id = DemoDealerEmployeeId, DealerId = DemoDealerId, FullName = "Demo Bayi Görevlisi" });
         }
 
+        var demoEmployee = await dbContext.DealerEmployees.SingleOrDefaultAsync(x => x.Id == DemoDealerEmployeeId, cancellationToken) ?? dbContext.DealerEmployees.Local.SingleOrDefault(x => x.Id == DemoDealerEmployeeId);
+        if (demoEmployee is not null && string.IsNullOrWhiteSpace(demoEmployee.PinHash)) { var pin = OtpCodeHasher.Hash("123456"); demoEmployee.PinHash = pin.Hash; demoEmployee.PinSalt = pin.Salt; }
+
         if (!await dbContext.LoyaltyConfigurations.AnyAsync(x => x.Id == LoyaltyConfiguration.DefaultId, cancellationToken))
         {
             dbContext.LoyaltyConfigurations.Add(new LoyaltyConfiguration());

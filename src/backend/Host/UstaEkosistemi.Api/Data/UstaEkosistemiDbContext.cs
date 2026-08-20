@@ -18,6 +18,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
     public DbSet<Dealer> Dealers => Set<Dealer>();
     public DbSet<DealerEmployee> DealerEmployees => Set<DealerEmployee>();
+    public DbSet<DealerSession> DealerSessions => Set<DealerSession>();
     public DbSet<RiskCase> RiskCases => Set<RiskCase>();
     public DbSet<RewardAuditEntry> RewardAuditEntries => Set<RewardAuditEntry>();
     public DbSet<LoyaltyConfiguration> LoyaltyConfigurations => Set<LoyaltyConfiguration>();
@@ -107,7 +108,12 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
 
         modelBuilder.Entity<DealerEmployee>(entity =>
         {
-            entity.ToTable("DealerEmployees"); entity.HasKey(x => x.Id); entity.Property(x => x.FullName).HasMaxLength(120).IsRequired(); entity.HasIndex(x => new { x.DealerId, x.IsActive }); entity.HasOne(x => x.Dealer).WithMany(x => x.Employees).HasForeignKey(x => x.DealerId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable("DealerEmployees"); entity.HasKey(x => x.Id); entity.Property(x => x.FullName).HasMaxLength(120).IsRequired(); entity.Property(x => x.PinHash).HasMaxLength(100); entity.Property(x => x.PinSalt).HasMaxLength(50); entity.HasIndex(x => new { x.DealerId, x.IsActive }); entity.HasOne(x => x.Dealer).WithMany(x => x.Employees).HasForeignKey(x => x.DealerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DealerSession>(entity =>
+        {
+            entity.ToTable("DealerSessions"); entity.HasKey(x => x.Id); entity.Property(x => x.TokenHash).HasMaxLength(64).IsFixedLength().IsRequired(); entity.HasIndex(x => x.TokenHash).IsUnique(); entity.HasIndex(x => new { x.DealerEmployeeId, x.ExpiresAtUtc }); entity.HasOne(x => x.DealerEmployee).WithMany(x => x.Sessions).HasForeignKey(x => x.DealerEmployeeId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<RiskCase>(entity =>
