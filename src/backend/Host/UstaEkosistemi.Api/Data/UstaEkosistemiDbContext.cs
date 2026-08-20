@@ -24,6 +24,8 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<LoyaltyConfiguration> LoyaltyConfigurations => Set<LoyaltyConfiguration>();
     public DbSet<LoyaltyConfigurationAudit> LoyaltyConfigurationAudits => Set<LoyaltyConfigurationAudit>();
     public DbSet<ReportExportAudit> ReportExportAudits => Set<ReportExportAudit>();
+    public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
+    public DbSet<AdminSession> AdminSessions => Set<AdminSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -178,6 +180,15 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         modelBuilder.Entity<ReportExportAudit>(entity =>
         {
             entity.ToTable("ReportExportAudits"); entity.HasKey(x => x.Id); entity.Property(x => x.ReportType).HasMaxLength(50).IsRequired(); entity.Property(x => x.Actor).HasMaxLength(120).IsRequired(); entity.HasIndex(x => x.CreatedAtUtc);
+        });
+
+        modelBuilder.Entity<AdminUser>(entity =>
+        {
+            entity.ToTable("AdminUsers"); entity.HasKey(x => x.Id); entity.Property(x => x.UserName).HasMaxLength(80).IsRequired(); entity.HasIndex(x => x.UserName).IsUnique(); entity.Property(x => x.FullName).HasMaxLength(120).IsRequired(); entity.Property(x => x.PasswordHash).HasMaxLength(100).IsRequired(); entity.Property(x => x.PasswordSalt).HasMaxLength(50).IsRequired(); entity.Property(x => x.Role).HasMaxLength(30).IsRequired();
+        });
+        modelBuilder.Entity<AdminSession>(entity =>
+        {
+            entity.ToTable("AdminSessions"); entity.HasKey(x => x.Id); entity.Property(x => x.TokenHash).HasMaxLength(64).IsFixedLength().IsRequired(); entity.HasIndex(x => x.TokenHash).IsUnique(); entity.HasIndex(x => new { x.AdminUserId, x.ExpiresAtUtc }); entity.HasOne(x => x.AdminUser).WithMany(x => x.Sessions).HasForeignKey(x => x.AdminUserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -33,6 +33,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseAuthorization();
+app.UseMiddleware<AdminAuthenticationMiddleware>();
 
 app.MapControllers();
 app.MapGet("/api/health", async (UstaEkosistemiDbContext dbContext, CancellationToken cancellationToken) => Results.Ok(new

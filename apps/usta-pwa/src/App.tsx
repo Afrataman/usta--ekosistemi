@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { createAdminCampaign, createAdminProduct, createAdminReward, createSupportRequest, exportAdminLoyaltyReport, fulfillDealerCoupon, generateAdminProductCodes, getAdminCampaigns, getAdminCraftsmen, getAdminDealers, getAdminLoyaltyReport, getAdminLoyaltyRules, getAdminOverview, getAdminProducts, getAdminRewards, getAdminRiskCases, getAdminSupportRequests, getAdminTransactions, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getReportExportAudits, getRewardRedemptions, getRewards, getSupportRequests, getWallet, loginDealer, logoutDealer, redeemProductCode, redeemReward, replyAdminSupportRequest, reportDealerRisk, requestOtpCode, returnDealerProduct, setAdminCampaignActive, setAdminEntityActive, updateAdminLoyaltyRules, updateAdminReward, updateAdminRiskStatus, updateAdminSupportRequest, updateCraftsmanProfile, verifyDealerCoupon, verifyOtpCode, type AdminCampaign, type AdminCraftsman, type AdminDealer, type AdminLoyaltyReport, type AdminOverview, type AdminProduct, type AdminReward, type AdminRiskCase, type AdminSupportRequest, type AdminTransactionResponse, type Campaign, type CraftsmanProfile, type Dashboard, type DealerCoupon, type DealerLoginResult, type LoyaltyRules, type ProductReturnResult, type ReportExportAudit, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
+import { createAdminCampaign, createAdminProduct, createAdminReward, createSupportRequest, exportAdminLoyaltyReport, fulfillDealerCoupon, generateAdminProductCodes, getAdminCampaigns, getAdminCraftsmen, getAdminDealers, getAdminLoyaltyReport, getAdminLoyaltyRules, getAdminOverview, getAdminProducts, getAdminRewards, getAdminRiskCases, getAdminSupportRequests, getAdminTransactions, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getReportExportAudits, getRewardRedemptions, getRewards, getSupportRequests, getWallet, loginAdmin, loginDealer, logoutAdmin, logoutDealer, redeemProductCode, redeemReward, replyAdminSupportRequest, reportDealerRisk, requestOtpCode, returnDealerProduct, setAdminCampaignActive, setAdminEntityActive, updateAdminLoyaltyRules, updateAdminReward, updateAdminRiskStatus, updateAdminSupportRequest, updateCraftsmanProfile, verifyDealerCoupon, verifyOtpCode, type AdminLoginResult, type AdminCampaign, type AdminCraftsman, type AdminDealer, type AdminLoyaltyReport, type AdminOverview, type AdminProduct, type AdminReward, type AdminRiskCase, type AdminSupportRequest, type AdminTransactionResponse, type Campaign, type CraftsmanProfile, type Dashboard, type DealerCoupon, type DealerLoginResult, type LoyaltyRules, type ProductReturnResult, type ReportExportAudit, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
 import './App.css'
 import { clearPendingRedemptions, enqueueRedemption, getPendingRedemptions, removePendingRedemption } from './offlineQueue'
 
@@ -383,6 +383,24 @@ function DealerRiskForm() {
 
 function DealerRiskPage() { return <main className="dealer-shell"><header><div><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Bayi Paneli</strong></div></div><i>Yalova Merkez Bayi</i></header><section className="dealer-hero"><span>⚑</span><h1>Şüpheli İşlem Bildir</h1><p>Şüpheli ürün kodu, kupon veya satış işlemini yönetici incelemesine gönderin.</p></section><DealerRiskForm /><footer><a href="/dealer">Bayi işlemlerine dön</a><span>Demo Bayi Görevlisi</span></footer></main> }
 
+function AdminLogin({ onAuthenticated }: { onAuthenticated: (profile: AdminLoginResult) => void }) {
+  const [userName, setUserName] = useState('admin'), [password, setPassword] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false)
+  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await loginAdmin(userName, password); sessionStorage.setItem('admin-token', result.token); sessionStorage.setItem('admin-profile', JSON.stringify(result)); onAuthenticated(result) } catch (error) { setMessage(error instanceof Error ? error.message : 'Giriş yapılamadı.') } finally { setBusy(false) } }
+  return <main className="admin-login"><div className="login-logo">⚒</div><span>USTA KULÜBÜ YÖNETİMİ</span><h1>Yönetici Girişi</h1><p>Kampanya, puan ve raporlama araçlarına yalnızca yetkili hesaplar erişebilir.</p><form onSubmit={submit}><label>Kullanıcı adı<input value={userName} onChange={(event) => setUserName(event.target.value)} autoComplete="username" required /></label><label>Parola<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" minLength={8} required /></label><small>Geliştirme hesabı: admin / Usta2026!</small>{message && <p>{message}</p>}<button disabled={busy} type="submit">{busy ? 'Doğrulanıyor…' : 'Yönetim Paneline Gir'}</button></form></main>
+}
+
+function AdminRouter() {
+  const path = window.location.pathname
+  return path.startsWith('/admin/support') ? <AdminSupportPage /> : path.startsWith('/admin/reports') ? <AdminReportsPage /> : path.startsWith('/admin/transactions') ? <AdminTransactionsPage /> : path.startsWith('/admin/loyalty-rules') ? <AdminLoyaltyRulesPage /> : path.startsWith('/admin/products') ? <AdminProductsPage /> : path.startsWith('/admin/rewards') ? <AdminRewardsPage /> : path.startsWith('/admin/campaigns') ? <AdminCampaignsPage /> : path.startsWith('/admin/craftsmen') ? <AdminManagementPage kind="craftsmen" /> : path.startsWith('/admin/dealers') ? <AdminManagementPage kind="dealers" /> : <AdminApp />
+}
+
+function AdminPortal() {
+  const [profile, setProfile] = useState<AdminLoginResult | null>(() => { try { const saved = sessionStorage.getItem('admin-profile'); const parsed = saved ? JSON.parse(saved) as AdminLoginResult : null; return parsed && new Date(parsed.expiresAtUtc) > new Date() && sessionStorage.getItem('admin-token') ? parsed : null } catch { return null } })
+  if (!profile) return <AdminLogin onAuthenticated={setProfile} />
+  const exit = async () => { await logoutAdmin(); setProfile(null) }
+  return <><AdminRouter /><button className="admin-logout" onClick={exit} type="button">{profile.user} · Çıkış</button></>
+}
+
 function AdminApp() {
   const [overview, setOverview] = useState<AdminOverview | null>(null); const [items, setItems] = useState<AdminRiskCase[]>([]); const [message, setMessage] = useState(''); const [busyId, setBusyId] = useState('')
   async function load() { const [summary, risks] = await Promise.all([getAdminOverview(), getAdminRiskCases()]); setOverview(summary); setItems(risks) }
@@ -554,6 +572,6 @@ function CraftsmanApp() {
   </main>
 }
 
-function App() { const path = window.location.pathname; return path.startsWith('/admin/support') ? <AdminSupportPage /> : path.startsWith('/admin/reports') ? <AdminReportsPage /> : path.startsWith('/admin/transactions') ? <AdminTransactionsPage /> : path.startsWith('/admin/loyalty-rules') ? <AdminLoyaltyRulesPage /> : path.startsWith('/admin/products') ? <AdminProductsPage /> : path.startsWith('/admin/rewards') ? <AdminRewardsPage /> : path.startsWith('/admin/campaigns') ? <AdminCampaignsPage /> : path.startsWith('/admin/craftsmen') ? <AdminManagementPage kind="craftsmen" /> : path.startsWith('/admin/dealers') ? <AdminManagementPage kind="dealers" /> : path.startsWith('/admin') ? <AdminApp /> : path.startsWith('/dealer/risk') ? <DealerPortal risk /> : path.startsWith('/dealer') ? <DealerPortal /> : <CraftsmanApp /> }
+function App() { const path = window.location.pathname; return path.startsWith('/admin') ? <AdminPortal /> : path.startsWith('/dealer/risk') ? <DealerPortal risk /> : path.startsWith('/dealer') ? <DealerPortal /> : <CraftsmanApp /> }
 
 export default App
