@@ -13,16 +13,21 @@ public sealed class SupportRequestsController(UstaEkosistemiDbContext dbContext)
     public async Task<IActionResult> GetMine(Guid craftsmanId, CancellationToken cancellationToken) => Ok(
         await dbContext.SupportRequests.AsNoTracking().Where(x => x.CraftsmanId == craftsmanId)
             .OrderByDescending(x => x.CreatedAtUtc)
-            .Select(x => new { x.Id, x.Category, x.Subject, x.Description, status = x.Status.ToString(), priority = x.Priority.ToString(), x.CreatedAtUtc, x.UpdatedAtUtc, x.ResolvedAtUtc, responses = x.Responses.OrderBy(r => r.CreatedAtUtc).Select(r => new { r.Id, r.Author, r.Message, r.CreatedAtUtc }) })
+            .Select(x => new { x.Id, x.Category, x.Subject, x.Description, x.ReferenceValue, status = x.Status.ToString(), priority = x.Priority.ToString(), x.CreatedAtUtc, x.UpdatedAtUtc, x.ResolvedAtUtc, responses = x.Responses.OrderBy(r => r.CreatedAtUtc).Select(r => new { r.Id, r.Author, r.Message, r.CreatedAtUtc }) })
             .ToListAsync(cancellationToken));
 
     [HttpPost]
     public async Task<IActionResult> Create(Guid craftsmanId, CreateSupportRequest request, CancellationToken cancellationToken)
     {
         if (!await dbContext.Craftsmen.AnyAsync(x => x.Id == craftsmanId && x.IsActive, cancellationToken)) return NotFound(new { message = "Aktif usta bulunamadı." });
+        var category = request.Category.Trim();
+        if (category is not ("Puan" or "Ürün Kodu" or "Ödül / Kupon" or "Hesap" or "İtiraz" or "Diğer")) return ValidationProblem("Destek kategorisi geçersiz.");
         if (string.IsNullOrWhiteSpace(request.Subject) || request.Subject.Trim().Length is < 5 or > 140 || string.IsNullOrWhiteSpace(request.Description) || request.Description.Trim().Length is < 10 or > 1500)
             return ValidationProblem("Konu en az 5, açıklama en az 10 karakter olmalıdır.");
-        var item = new SupportRequest { CraftsmanId = craftsmanId, Category = request.Category.Trim(), Subject = request.Subject.Trim(), Description = request.Description.Trim() };
+        var reference = string.IsNullOrWhiteSpace(request.ReferenceValue) ? null : request.ReferenceValue.Trim().ToUpperInvariant();
+        if (category == "İtiraz" && (reference is null || reference.Length is < 4 or > 120)) return ValidationProblem("İtiraz için 4–120 karakterlik işlem referansı zorunludur.");
+        if (reference?.Length > 120) return ValidationProblem("İşlem referansı en fazla 120 karakter olabilir.");
+        var item = new SupportRequest { CraftsmanId = craftsmanId, Category = category, Subject = request.Subject.Trim(), Description = request.Description.Trim(), ReferenceValue = reference, Priority = category == "İtiraz" ? SupportPriority.High : SupportPriority.Normal };
         dbContext.SupportRequests.Add(item); await dbContext.SaveChangesAsync(cancellationToken);
         return Created($"/api/craftsmen/{craftsmanId}/support-requests/{item.Id}", new { item.Id, status = item.Status.ToString(), item.CreatedAtUtc });
     }
@@ -42,5 +47,5 @@ public sealed class SupportRequestsController(UstaEkosistemiDbContext dbContext)
     }
 }
 
-public sealed record CreateSupportRequest(string Category, string Subject, string Description);
+public sealed record CreateSupportRequest(string Category, string Subject, string Description, string? ReferenceValue);
 public sealed record AddCraftsmanSupportResponse(string Message);

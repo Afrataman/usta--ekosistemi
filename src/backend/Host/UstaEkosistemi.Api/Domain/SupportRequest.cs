@@ -7,6 +7,7 @@ public sealed class SupportRequest
     public required string Category { get; set; }
     public required string Subject { get; set; }
     public required string Description { get; set; }
+    public string? ReferenceValue { get; set; }
     public SupportRequestStatus Status { get; set; } = SupportRequestStatus.Open;
     public SupportPriority Priority { get; set; } = SupportPriority.Normal;
     public string? AssignedTo { get; set; }

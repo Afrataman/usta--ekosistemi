@@ -16,7 +16,7 @@ public sealed class AdminSupportController(UstaEkosistemiDbContext dbContext) : 
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<SupportRequestStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed);
         return Ok(await query.OrderByDescending(x => x.Priority).ThenByDescending(x => x.UpdatedAtUtc).Take(200).Select(x => new
         {
-            x.Id, x.Category, x.Subject, x.Description, status = x.Status.ToString(), priority = x.Priority.ToString(), x.AssignedTo, x.CreatedAtUtc, x.UpdatedAtUtc, x.ResolvedAtUtc,
+            x.Id, x.Category, x.Subject, x.Description, x.ReferenceValue, status = x.Status.ToString(), priority = x.Priority.ToString(), x.AssignedTo, x.CreatedAtUtc, x.UpdatedAtUtc, x.ResolvedAtUtc,
             craftsman = x.Craftsman.FullName, phoneNumber = MaskPhone(x.Craftsman.PhoneNumber),
             responses = x.Responses.OrderBy(r => r.CreatedAtUtc).Select(r => new { r.Id, r.Author, r.Message, r.CreatedAtUtc })
         }).ToListAsync(token));

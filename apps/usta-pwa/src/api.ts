@@ -159,7 +159,7 @@ export async function updateCraftsmanProfile(craftsmanId: string, profile: Updat
 export type Campaign = { id: string; title: string; summary: string; pointMultiplier: number; startsAtUtc: string; endsAtUtc: string; productId: string | null; productName: string | null }
 export type CraftsmanNotification = { id: string; type: string; title: string; message: string; referenceType: string | null; referenceId: string | null; createdAtUtc: string; readAtUtc: string | null }
 export type NotificationInbox = { unreadCount: number; items: CraftsmanNotification[] }
-export type SupportItem = { id: string; category: string; subject: string; description: string; status: string; priority: string; createdAtUtc: string; updatedAtUtc: string; resolvedAtUtc: string | null; responses: Array<{ id: string; author: string; message: string; createdAtUtc: string }> }
+export type SupportItem = { id: string; category: string; subject: string; description: string; referenceValue: string | null; status: string; priority: string; createdAtUtc: string; updatedAtUtc: string; resolvedAtUtc: string | null; responses: Array<{ id: string; author: string; message: string; createdAtUtc: string }> }
 
 export async function getCampaigns(signal?: AbortSignal): Promise<Campaign[]> {
   const response = await fetch(`${apiBaseUrl}/api/campaigns`, { signal })
@@ -189,7 +189,7 @@ export async function getSupportRequests(craftsmanId: string, signal?: AbortSign
   return response.json() as Promise<SupportItem[]>
 }
 
-export async function createSupportRequest(craftsmanId: string, request: { category: string; subject: string; description: string }): Promise<void> {
+export async function createSupportRequest(craftsmanId: string, request: { category: string; subject: string; description: string; referenceValue: string | null }): Promise<void> {
   const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { method: 'POST', body: JSON.stringify(request) })
   if (!response.ok) throw new Error('Destek talebi oluşturulamadı.')
 }
@@ -324,7 +324,7 @@ export async function getAdminLoyaltyReport(from: string, to: string): Promise<A
 export async function getReportExportAudits(): Promise<ReportExportAudit[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/reports/exports`); if (!response.ok) throw new Error('Dışa aktarma geçmişi alınamadı.'); return response.json() as Promise<ReportExportAudit[]> }
 export async function exportAdminLoyaltyReport(from: string, to: string): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/reports/loyalty/export?from=${from}&to=${to}`); if (!response.ok) throw new Error('CSV oluşturulamadı.'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `usta-kulubu-raporu-${to}.csv`; link.click(); URL.revokeObjectURL(url) }
 export type SupportResponseItem = { id: string; author: string; message: string; createdAtUtc: string }
-export type AdminSupportRequest = { id: string; category: string; subject: string; description: string; status: 'Open' | 'InProgress' | 'Resolved' | 'Closed'; priority: 'Low' | 'Normal' | 'High' | 'Urgent'; assignedTo: string | null; createdAtUtc: string; updatedAtUtc: string; resolvedAtUtc: string | null; craftsman: string; phoneNumber: string; responses: SupportResponseItem[] }
+export type AdminSupportRequest = { id: string; category: string; subject: string; description: string; referenceValue: string | null; status: 'Open' | 'InProgress' | 'Resolved' | 'Closed'; priority: 'Low' | 'Normal' | 'High' | 'Urgent'; assignedTo: string | null; createdAtUtc: string; updatedAtUtc: string; resolvedAtUtc: string | null; craftsman: string; phoneNumber: string; responses: SupportResponseItem[] }
 export async function getAdminSupportRequests(status?: string): Promise<AdminSupportRequest[]> { const query = status ? `?status=${status}` : ''; const response = await adminFetch(`${apiBaseUrl}/api/admin/support-requests${query}`); if (!response.ok) throw new Error('Destek talepleri alınamadı.'); return response.json() as Promise<AdminSupportRequest[]> }
 export async function updateAdminSupportRequest(id: string, request: { status: string; priority: string; assignedTo: string | null }): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/support-requests/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }); if (!response.ok) throw new Error('Destek talebi güncellenemedi.') }
 export async function replyAdminSupportRequest(id: string, message: string): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/support-requests/${id}/responses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) }); if (!response.ok) throw new Error('Yanıt gönderilemedi.') }
