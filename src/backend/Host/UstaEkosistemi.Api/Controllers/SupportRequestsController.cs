@@ -26,6 +26,21 @@ public sealed class SupportRequestsController(UstaEkosistemiDbContext dbContext)
         dbContext.SupportRequests.Add(item); await dbContext.SaveChangesAsync(cancellationToken);
         return Created($"/api/craftsmen/{craftsmanId}/support-requests/{item.Id}", new { item.Id, status = item.Status.ToString(), item.CreatedAtUtc });
     }
+
+    [HttpPost("{requestId:guid}/responses")]
+    public async Task<IActionResult> Reply(Guid craftsmanId, Guid requestId, AddCraftsmanSupportResponse request, CancellationToken cancellationToken)
+    {
+        var message = request.Message.Trim();
+        if (message.Length is < 3 or > 1500) return ValidationProblem("Yanıt 3–1500 karakter olmalıdır.");
+        var item = await dbContext.SupportRequests.SingleOrDefaultAsync(x => x.Id == requestId && x.CraftsmanId == craftsmanId, cancellationToken);
+        if (item is null) return NotFound(new { message = "Destek talebi bulunamadı." });
+        if (item.Status == SupportRequestStatus.Closed) return Conflict(new { message = "Kapalı destek talebine yanıt verilemez. Yeni talep oluşturun." });
+        var response = new SupportResponse { SupportRequestId = item.Id, Author = "Usta", Message = message };
+        item.Status = SupportRequestStatus.InProgress; item.UpdatedAtUtc = response.CreatedAtUtc; item.ResolvedAtUtc = null;
+        dbContext.SupportResponses.Add(response); await dbContext.SaveChangesAsync(cancellationToken);
+        return Created($"/api/craftsmen/{craftsmanId}/support-requests/{item.Id}/responses/{response.Id}", new { response.Id, response.Author, response.Message, response.CreatedAtUtc });
+    }
 }
 
 public sealed record CreateSupportRequest(string Category, string Subject, string Description);
+public sealed record AddCraftsmanSupportResponse(string Message);

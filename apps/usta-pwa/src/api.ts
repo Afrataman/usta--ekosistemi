@@ -159,7 +159,7 @@ export async function updateCraftsmanProfile(craftsmanId: string, profile: Updat
 export type Campaign = { id: string; title: string; summary: string; pointMultiplier: number; startsAtUtc: string; endsAtUtc: string; productId: string | null; productName: string | null }
 export type CraftsmanNotification = { id: string; type: string; title: string; message: string; referenceType: string | null; referenceId: string | null; createdAtUtc: string; readAtUtc: string | null }
 export type NotificationInbox = { unreadCount: number; items: CraftsmanNotification[] }
-export type SupportItem = { id: string; category: string; subject: string; description: string; status: string; createdAtUtc: string; resolvedAtUtc: string | null }
+export type SupportItem = { id: string; category: string; subject: string; description: string; status: string; priority: string; createdAtUtc: string; updatedAtUtc: string; resolvedAtUtc: string | null; responses: Array<{ id: string; author: string; message: string; createdAtUtc: string }> }
 
 export async function getCampaigns(signal?: AbortSignal): Promise<Campaign[]> {
   const response = await fetch(`${apiBaseUrl}/api/campaigns`, { signal })
@@ -192,6 +192,11 @@ export async function getSupportRequests(craftsmanId: string, signal?: AbortSign
 export async function createSupportRequest(craftsmanId: string, request: { category: string; subject: string; description: string }): Promise<void> {
   const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { method: 'POST', body: JSON.stringify(request) })
   if (!response.ok) throw new Error('Destek talebi oluşturulamadı.')
+}
+
+export async function replySupportRequest(craftsmanId: string, requestId: string, message: string): Promise<void> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests/${requestId}/responses`, { method: 'POST', body: JSON.stringify({ message }) })
+  if (!response.ok) { const body = await response.json().catch(() => null) as { detail?: string; message?: string } | null; throw new Error(body?.detail ?? body?.message ?? 'Yanıt gönderilemedi.') }
 }
 
 export async function getRewardRedemptions(craftsmanId: string, signal?: AbortSignal): Promise<RewardRedemption[]> {
