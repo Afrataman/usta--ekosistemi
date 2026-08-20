@@ -9,6 +9,46 @@ namespace UstaEkosistemi.Api.Controllers;
 [Route("api/admin/transactions")]
 public sealed class AdminTransactionsController(UstaEkosistemiDbContext dbContext) : ControllerBase
 {
+    [HttpPost("adjustments")]
+    public async Task<IActionResult> CreateAdjustment(CreatePointAdjustmentRequest request, CancellationToken token)
+    {
+        if (request.Amount is 0 or < -100000 or > 100000)
+            return ValidationProblem("Düzeltme miktarı sıfır olamaz ve ±100.000 puan sınırında olmalıdır.");
+        var reason = request.Reason.Trim();
+        if (reason.Length is < 10 or > 240)
+            return ValidationProblem("Düzeltme nedeni 10 ile 240 karakter arasında olmalıdır.");
+        if (!HttpContext.Items.TryGetValue("AdminUserId", out var actorValue) || actorValue is not Guid actorId)
+            return Unauthorized(new { message = "Yönetici kimliği doğrulanamadı." });
+
+        var craftsman = await dbContext.Craftsmen.SingleOrDefaultAsync(x => x.Id == request.CraftsmanId && x.IsActive, token);
+        if (craftsman is null) return NotFound(new { message = "Aktif usta bulunamadı." });
+
+        var adjustmentId = Guid.NewGuid();
+        var actor = HttpContext.Items["AdminName"]?.ToString() ?? "Yetkili yönetici";
+        dbContext.PointLedgerEntries.Add(new PointLedgerEntry
+        {
+            Id = adjustmentId,
+            CraftsmanId = craftsman.Id,
+            Amount = request.Amount,
+            TransactionType = PointTransactionType.ManualAdjustment,
+            ReferenceType = "AdminAdjustment",
+            ReferenceId = adjustmentId,
+            Description = $"Yetkili düzeltme · {reason} · {actor}"
+        });
+        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification
+        {
+            CraftsmanId = craftsman.Id,
+            Type = "PointsEarned",
+            Title = "Puan düzeltmesi yapıldı",
+            Message = $"Hesabınıza {(request.Amount > 0 ? "+" : string.Empty)}{request.Amount:N0} puan düzeltmesi uygulandı. Neden: {reason}",
+            ReferenceType = "AdminAdjustment",
+            ReferenceId = adjustmentId
+        });
+        await dbContext.SaveChangesAsync(token);
+        var balance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == craftsman.Id).SumAsync(x => (int?)x.Amount, token) ?? 0;
+        return Ok(new { id = adjustmentId, craftsman = craftsman.FullName, request.Amount, reason, actorId, actor, balance, pointDebt = Math.Max(0, -balance), createdAtUtc = DateTimeOffset.UtcNow });
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetAll(string? type, int take = 100, CancellationToken token = default)
     {
@@ -40,3 +80,4 @@ public sealed class AdminTransactionsController(UstaEkosistemiDbContext dbContex
 }
 
 public sealed record AdminTransactionRow(Guid Id, string Category, string Type, string Description, int Amount, string Craftsman, string PhoneNumber, string ReferenceType, string ReferenceValue, DateTimeOffset OccurredAtUtc, string? DealerEmployee);
+public sealed record CreatePointAdjustmentRequest(Guid CraftsmanId, int Amount, string Reason);
