@@ -29,6 +29,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<MembershipPass> MembershipPasses => Set<MembershipPass>();
     public DbSet<DealerSale> DealerSales => Set<DealerSale>();
     public DbSet<CraftsmanNotification> CraftsmanNotifications => Set<CraftsmanNotification>();
+    public DbSet<CraftsmanSession> CraftsmanSessions => Set<CraftsmanSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -204,6 +205,10 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         modelBuilder.Entity<CraftsmanNotification>(entity =>
         {
             entity.ToTable("CraftsmanNotifications"); entity.HasKey(x => x.Id); entity.Property(x => x.Type).HasMaxLength(30).IsRequired(); entity.Property(x => x.Title).HasMaxLength(140).IsRequired(); entity.Property(x => x.Message).HasMaxLength(500).IsRequired(); entity.Property(x => x.ReferenceType).HasMaxLength(40); entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc }); entity.HasIndex(x => new { x.CraftsmanId, x.ReadAtUtc }); entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<CraftsmanSession>(entity =>
+        {
+            entity.ToTable("CraftsmanSessions"); entity.HasKey(x => x.Id); entity.Property(x => x.TokenHash).HasMaxLength(64).IsFixedLength().IsRequired(); entity.HasIndex(x => x.TokenHash).IsUnique(); entity.HasIndex(x => new { x.CraftsmanId, x.ExpiresAtUtc }); entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

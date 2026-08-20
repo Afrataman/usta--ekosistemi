@@ -16,6 +16,8 @@ export type Dashboard = {
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:5028'
+const craftsmanHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('usta-token') ?? ''}` })
+const craftsmanFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, { ...init, headers: { ...craftsmanHeaders(), ...(init.headers as Record<string, string> | undefined) } })
 const adminHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('admin-token') ?? ''}` })
 const adminFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, { ...init, headers: { ...adminHeaders(), ...(init.headers as Record<string, string> | undefined) } })
 export type AdminLoginResult = { token: string; expiresAtUtc: string; user: string; role: string }
@@ -32,7 +34,7 @@ export async function getDemoDashboard(signal?: AbortSignal): Promise<Dashboard>
 }
 
 export async function getCraftsmanDashboard(craftsmanId: string, signal?: AbortSignal): Promise<Dashboard> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/dashboard`, { signal })
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/dashboard`, { signal })
   if (!response.ok) throw new Error('Dashboard alınamadı.')
   return response.json() as Promise<Dashboard>
 }
@@ -45,12 +47,15 @@ export async function requestOtpCode(phoneNumber: string): Promise<OtpChallenge>
   return body
 }
 
-export async function verifyOtpCode(challengeId: string, code: string): Promise<{ craftsmanId: string; fullName: string; needsProfile: boolean }> {
+export type CraftsmanLoginResult = { craftsmanId: string; fullName: string; needsProfile: boolean; token: string; expiresAtUtc: string }
+export async function verifyOtpCode(challengeId: string, code: string): Promise<CraftsmanLoginResult> {
   const response = await fetch(`${apiBaseUrl}/api/auth/verify-code`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, code }) })
-  const body = await response.json() as { craftsmanId: string; fullName: string; needsProfile: boolean; message?: string }
+  const body = await response.json() as CraftsmanLoginResult & { message?: string }
   if (!response.ok) throw new Error(body.message ?? 'Kod doğrulanamadı.')
   return body
 }
+
+export async function logoutCraftsman(): Promise<void> { await fetch(`${apiBaseUrl}/api/auth/logout`, { method: 'POST', headers: craftsmanHeaders() }) }
 
 export type RedeemResult = {
   alreadyProcessed: boolean
@@ -133,13 +138,13 @@ export type UpdateCraftsmanProfile = Pick<CraftsmanProfile,
   'fullName' | 'city' | 'campaignNotificationsEnabled' | 'smsNotificationsEnabled'>
 
 export async function getCraftsmanProfile(craftsmanId: string, signal?: AbortSignal): Promise<CraftsmanProfile> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, { signal })
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, { signal })
   if (!response.ok) throw new Error('Profil alınamadı.')
   return response.json() as Promise<CraftsmanProfile>
 }
 
 export async function updateCraftsmanProfile(craftsmanId: string, profile: UpdateCraftsmanProfile): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile),
   })
   if (!response.ok) {
@@ -160,34 +165,34 @@ export async function getCampaigns(signal?: AbortSignal): Promise<Campaign[]> {
 }
 
 export async function getNotifications(craftsmanId: string, signal?: AbortSignal): Promise<NotificationInbox> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications`, { signal })
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications`, { signal })
   if (!response.ok) throw new Error('Bildirimler alınamadı.')
   return response.json() as Promise<NotificationInbox>
 }
 
 export async function markNotificationRead(craftsmanId: string, notificationId: string): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications/${notificationId}/read`, { method: 'POST' })
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications/${notificationId}/read`, { method: 'POST' })
   if (!response.ok) throw new Error('Bildirim güncellenemedi.')
 }
 
 export async function markAllNotificationsRead(craftsmanId: string): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications/read-all`, { method: 'POST' })
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications/read-all`, { method: 'POST' })
   if (!response.ok) throw new Error('Bildirimler güncellenemedi.')
 }
 
 export async function getSupportRequests(craftsmanId: string, signal?: AbortSignal): Promise<SupportItem[]> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { signal })
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { signal })
   if (!response.ok) throw new Error('Destek talepleri alınamadı.')
   return response.json() as Promise<SupportItem[]>
 }
 
 export async function createSupportRequest(craftsmanId: string, request: { category: string; subject: string; description: string }): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) })
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { method: 'POST', body: JSON.stringify(request) })
   if (!response.ok) throw new Error('Destek talebi oluşturulamadı.')
 }
 
 export async function getRewardRedemptions(craftsmanId: string, signal?: AbortSignal): Promise<RewardRedemption[]> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/reward-redemptions`, { signal })
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/reward-redemptions`, { signal })
   if (!response.ok) {
     throw new Error('Kuponlar alınamadı.')
   }
@@ -196,7 +201,7 @@ export async function getRewardRedemptions(craftsmanId: string, signal?: AbortSi
 }
 
 export async function redeemReward(rewardId: string, craftsmanId: string): Promise<RewardRedemptionResult> {
-  const response = await fetch(`${apiBaseUrl}/api/rewards/${rewardId}/redeem`, {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/rewards/${rewardId}/redeem`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ craftsmanId }),
@@ -210,7 +215,7 @@ export async function redeemReward(rewardId: string, craftsmanId: string): Promi
 }
 
 export async function getWallet(craftsmanId: string, signal?: AbortSignal): Promise<Wallet> {
-  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/wallet`, { signal })
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/wallet`, { signal })
   if (!response.ok) {
     throw new Error('Puan cüzdanı alınamadı.')
   }
@@ -219,7 +224,7 @@ export async function getWallet(craftsmanId: string, signal?: AbortSignal): Prom
 }
 
 export async function redeemProductCode(craftsmanId: string, code: string, requestId: string): Promise<RedeemResult> {
-  const response = await fetch(`${apiBaseUrl}/api/product-codes/redeem`, {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/product-codes/redeem`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ craftsmanId, code, requestId }),
@@ -268,7 +273,7 @@ export async function reportDealerRisk(request: { referenceType: string; referen
   return body
 }
 export type MembershipPassResult = { token: string; expiresAtUtc: string }
-export async function createMembershipPass(craftsmanId: string): Promise<MembershipPassResult> { const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/membership-pass`, { method: 'POST' }); if (!response.ok) throw new Error('Üyelik QR’ı oluşturulamadı.'); return response.json() as Promise<MembershipPassResult> }
+export async function createMembershipPass(craftsmanId: string): Promise<MembershipPassResult> { const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/membership-pass`, { method: 'POST' }); if (!response.ok) throw new Error('Üyelik QR’ı oluşturulamadı.'); return response.json() as Promise<MembershipPassResult> }
 export type VerifiedMembership = { id: string; expiresAtUtc: string; craftsman: string; level: string }
 export async function verifyMembershipPass(token: string): Promise<VerifiedMembership> { const response = await fetch(`${apiBaseUrl}/api/dealer/membership-passes/${encodeURIComponent(token)}`, { headers: dealerHeaders() }); const body = await response.json() as VerifiedMembership & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Üyelik QR’ı doğrulanamadı.'); return body }
 export type DealerSaleResult = { id: string; saleReference: string; totalAmount: number; craftsman: string; createdAtUtc: string }

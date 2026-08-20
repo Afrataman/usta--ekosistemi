@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
+using UstaEkosistemi.Api.Security;
 
 namespace UstaEkosistemi.Api.Controllers;
 
@@ -39,6 +40,11 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
     [HttpPost("{rewardId:guid}/redeem")]
     public async Task<IActionResult> Redeem(Guid rewardId, RedeemRewardRequest request, CancellationToken cancellationToken)
     {
+        var authorization = Request.Headers.Authorization.ToString();
+        if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return Unauthorized(new { message = "Usta oturumu zorunludur." });
+        var hash = CraftsmanSessionSecurity.HashToken(authorization[7..].Trim()); var now = DateTimeOffset.UtcNow;
+        var authenticatedId = await dbContext.CraftsmanSessions.Where(x => x.TokenHash == hash && x.RevokedAtUtc == null && x.ExpiresAtUtc > now && x.Craftsman.IsActive).Select(x => (Guid?)x.CraftsmanId).SingleOrDefaultAsync(cancellationToken);
+        if (authenticatedId != request.CraftsmanId) return Unauthorized(new { message = "Usta oturumu hesapla eşleşmiyor." });
         await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var craftsmanExists = await dbContext.Craftsmen.AnyAsync(x => x.Id == request.CraftsmanId && x.IsActive, cancellationToken);
         if (!craftsmanExists)

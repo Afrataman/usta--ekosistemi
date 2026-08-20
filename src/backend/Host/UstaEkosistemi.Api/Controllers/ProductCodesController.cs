@@ -19,6 +19,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
         {
             return ValidationProblem("Usta, işlem anahtarı ve ürün kodu zorunludur.");
         }
+        if (!TryGetAuthenticatedCraftsman(out var authenticatedId) || authenticatedId != request.CraftsmanId) return Unauthorized(new { message = "Usta oturumu geçersiz veya hesapla eşleşmiyor." });
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var craftsman = await dbContext.Craftsmen.SingleOrDefaultAsync(x => x.Id == request.CraftsmanId && x.IsActive, cancellationToken);
@@ -82,6 +83,16 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
             .SumAsync(x => x.Amount, cancellationToken);
 
         return Ok(new { alreadyProcessed = false, earnedPoints = ledgerEntry.Amount, balance, product = productCode.Product.Name, campaignMultiplier = multiplier, level = craftsman.Level.ToString(), productCode.RedeemedAtUtc });
+    }
+
+    private bool TryGetAuthenticatedCraftsman(out Guid craftsmanId)
+    {
+        craftsmanId = Guid.Empty;
+        var authorization = Request.Headers.Authorization.ToString();
+        if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return false;
+        var hash = CraftsmanSessionSecurity.HashToken(authorization[7..].Trim()); var now = DateTimeOffset.UtcNow;
+        var id = dbContext.CraftsmanSessions.Where(x => x.TokenHash == hash && x.RevokedAtUtc == null && x.ExpiresAtUtc > now && x.Craftsman.IsActive).Select(x => (Guid?)x.CraftsmanId).SingleOrDefault();
+        if (!id.HasValue) return false; craftsmanId = id.Value; return true;
     }
 
     [HttpPost("return")]

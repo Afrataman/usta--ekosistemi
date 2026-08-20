@@ -47,8 +47,24 @@ public sealed class AuthController(UstaEkosistemiDbContext dbContext, IWebHostEn
             dbContext.Craftsmen.Add(craftsman);
             dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = craftsman.Id, Type = "Welcome", Title = "Usta Kulübü'ne hoş geldiniz", Message = "Ürün kodlarını okutarak puan kazanabilir, puanlarınızı program ödüllerinde kullanabilirsiniz." });
         }
+        var rawToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var session = new CraftsmanSession { CraftsmanId = craftsman.Id, TokenHash = CraftsmanSessionSecurity.HashToken(rawToken), ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30) };
+        dbContext.CraftsmanSessions.Add(session);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { craftsman.Id, craftsman.FullName, needsProfile = craftsman.FullName == "Yeni Usta" });
+        return Ok(new { craftsmanId = craftsman.Id, craftsman.FullName, needsProfile = craftsman.FullName == "Yeni Usta", token = rawToken, session.ExpiresAtUtc });
+    }
+
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout(CancellationToken cancellationToken)
+    {
+        var authorization = Request.Headers.Authorization.ToString();
+        if (authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var hash = CraftsmanSessionSecurity.HashToken(authorization[7..].Trim());
+            var session = await dbContext.CraftsmanSessions.SingleOrDefaultAsync(x => x.TokenHash == hash && x.RevokedAtUtc == null, cancellationToken);
+            if (session is not null) { session.RevokedAtUtc = DateTimeOffset.UtcNow; await dbContext.SaveChangesAsync(cancellationToken); }
+        }
+        return NoContent();
     }
 
     private static string? NormalizePhone(string input)
