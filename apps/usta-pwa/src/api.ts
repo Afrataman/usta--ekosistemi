@@ -149,12 +149,30 @@ export async function updateCraftsmanProfile(craftsmanId: string, profile: Updat
 }
 
 export type Campaign = { id: string; title: string; summary: string; pointMultiplier: number; startsAtUtc: string; endsAtUtc: string }
+export type CraftsmanNotification = { id: string; type: string; title: string; message: string; referenceType: string | null; referenceId: string | null; createdAtUtc: string; readAtUtc: string | null }
+export type NotificationInbox = { unreadCount: number; items: CraftsmanNotification[] }
 export type SupportItem = { id: string; category: string; subject: string; description: string; status: string; createdAtUtc: string; resolvedAtUtc: string | null }
 
 export async function getCampaigns(signal?: AbortSignal): Promise<Campaign[]> {
   const response = await fetch(`${apiBaseUrl}/api/campaigns`, { signal })
   if (!response.ok) throw new Error('Kampanyalar alınamadı.')
   return response.json() as Promise<Campaign[]>
+}
+
+export async function getNotifications(craftsmanId: string, signal?: AbortSignal): Promise<NotificationInbox> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications`, { signal })
+  if (!response.ok) throw new Error('Bildirimler alınamadı.')
+  return response.json() as Promise<NotificationInbox>
+}
+
+export async function markNotificationRead(craftsmanId: string, notificationId: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications/${notificationId}/read`, { method: 'POST' })
+  if (!response.ok) throw new Error('Bildirim güncellenemedi.')
+}
+
+export async function markAllNotificationsRead(craftsmanId: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications/read-all`, { method: 'POST' })
+  if (!response.ok) throw new Error('Bildirimler güncellenemedi.')
 }
 
 export async function getSupportRequests(craftsmanId: string, signal?: AbortSignal): Promise<SupportItem[]> {

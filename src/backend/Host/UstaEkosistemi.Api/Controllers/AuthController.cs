@@ -45,6 +45,7 @@ public sealed class AuthController(UstaEkosistemiDbContext dbContext, IWebHostEn
         {
             craftsman = new Craftsman { PhoneNumber = challenge.PhoneNumber, FullName = "Yeni Usta" };
             dbContext.Craftsmen.Add(craftsman);
+            dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = craftsman.Id, Type = "Welcome", Title = "Usta Kulübü'ne hoş geldiniz", Message = "Ürün kodlarını okutarak puan kazanabilir, puanlarınızı program ödüllerinde kullanabilirsiniz." });
         }
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { craftsman.Id, craftsman.FullName, needsProfile = craftsman.FullName == "Yeni Usta" });

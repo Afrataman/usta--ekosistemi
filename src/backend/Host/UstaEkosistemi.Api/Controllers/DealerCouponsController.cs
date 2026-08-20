@@ -32,6 +32,7 @@ public sealed class DealerCouponsController(UstaEkosistemiDbContext dbContext, D
         if (coupon.Reward.DeliveryType != RewardDeliveryType.DealerPickup) return Conflict(new { message = "Bu ödül bayiden teslim edilemez." });
         if (coupon.ExpiresAtUtc.HasValue && coupon.ExpiresAtUtc <= DateTimeOffset.UtcNow) return Conflict(new { message = "Kuponun süresi dolmuş." });
         coupon.Status = RewardRedemptionStatus.Fulfilled; coupon.FulfilledAtUtc = DateTimeOffset.UtcNow; coupon.FulfilledByDealerEmployeeId = employee.Id;
+        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = coupon.CraftsmanId, Type = "Delivery", Title = "Ödül teslim edildi", Message = $"{coupon.Reward.Name} ödülünüz bayi tarafından teslim edildi.", ReferenceType = nameof(RewardRedemption), ReferenceId = coupon.Id });
         await dbContext.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
         return Ok(ToResult(coupon, false));
     }

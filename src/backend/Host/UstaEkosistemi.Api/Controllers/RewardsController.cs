@@ -83,6 +83,7 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
             ReferenceId = redemption.Id,
             Description = $"{reward.Name} ödülü"
         });
+        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = request.CraftsmanId, Type = "Reward", Title = "Ödülünüz hazır", Message = $"{reward.Name} için {reward.PointCost:N0} puan kullanıldı. Teslim kodunuz Kuponlar ekranında.", ReferenceType = nameof(RewardRedemption), ReferenceId = redemption.Id });
         if (reward.StockQuantity.HasValue)
         {
             reward.StockQuantity--;

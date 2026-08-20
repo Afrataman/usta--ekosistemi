@@ -41,7 +41,9 @@ public sealed class AdminSupportController(UstaEkosistemiDbContext dbContext) : 
         if (item is null) return NotFound(new { message = "Destek talebi bulunamadı." });
         var response = new SupportResponse { SupportRequestId = id, Author = "Demo Destek", Message = request.Message.Trim() };
         item.Status = SupportRequestStatus.InProgress; item.AssignedTo ??= response.Author; item.UpdatedAtUtc = response.CreatedAtUtc;
-        dbContext.SupportResponses.Add(response); await dbContext.SaveChangesAsync(token);
+        dbContext.SupportResponses.Add(response);
+        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = item.CraftsmanId, Type = "Support", Title = "Destek talebiniz yanıtlandı", Message = $"{item.Subject} başlıklı talebinize yeni yanıt geldi.", ReferenceType = nameof(SupportRequest), ReferenceId = item.Id });
+        await dbContext.SaveChangesAsync(token);
         return Created($"/api/admin/support-requests/{id}/responses/{response.Id}", new { response.Id, response.Author, response.Message, response.CreatedAtUtc });
     }
 

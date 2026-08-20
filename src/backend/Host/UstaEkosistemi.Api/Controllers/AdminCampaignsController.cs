@@ -20,7 +20,9 @@ public sealed class AdminCampaignsController(UstaEkosistemiDbContext dbContext) 
         if (request.PointMultiplier is < 1 or > 10) return ValidationProblem("Puan çarpanı 1 ile 10 arasında olmalıdır.");
         if (request.EndsAtUtc <= request.StartsAtUtc) return ValidationProblem("Bitiş tarihi başlangıç tarihinden sonra olmalıdır.");
         var campaign = new Campaign { Title = title, Summary = summary, PointMultiplier = request.PointMultiplier, StartsAtUtc = request.StartsAtUtc, EndsAtUtc = request.EndsAtUtc, IsActive = request.IsActive, DisplayOrder = request.DisplayOrder };
-        dbContext.Campaigns.Add(campaign); await dbContext.SaveChangesAsync(token);
+        dbContext.Campaigns.Add(campaign);
+        if (campaign.IsActive) await AddCampaignNotifications(campaign, token);
+        await dbContext.SaveChangesAsync(token);
         return Created($"/api/admin/campaigns/{campaign.Id}", new { campaign.Id });
     }
 
@@ -29,8 +31,17 @@ public sealed class AdminCampaignsController(UstaEkosistemiDbContext dbContext) 
     {
         var campaign = await dbContext.Campaigns.SingleOrDefaultAsync(x => x.Id == id, token);
         if (campaign is null) return NotFound(new { message = "Kampanya bulunamadı." });
-        campaign.IsActive = request.IsActive; await dbContext.SaveChangesAsync(token);
+        var newlyActivated = request.IsActive && !campaign.IsActive;
+        campaign.IsActive = request.IsActive;
+        if (newlyActivated) await AddCampaignNotifications(campaign, token);
+        await dbContext.SaveChangesAsync(token);
         return Ok(new { campaign.Id, campaign.IsActive });
+    }
+
+    private async Task AddCampaignNotifications(Campaign campaign, CancellationToken token)
+    {
+        var craftsmanIds = await dbContext.Craftsmen.Where(x => x.IsActive && x.CampaignNotificationsEnabled).Select(x => x.Id).ToListAsync(token);
+        dbContext.CraftsmanNotifications.AddRange(craftsmanIds.Select(id => new CraftsmanNotification { CraftsmanId = id, Type = "Campaign", Title = campaign.Title, Message = campaign.Summary, ReferenceType = nameof(Campaign), ReferenceId = campaign.Id }));
     }
 }
 

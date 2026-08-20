@@ -28,6 +28,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<AdminSession> AdminSessions => Set<AdminSession>();
     public DbSet<MembershipPass> MembershipPasses => Set<MembershipPass>();
     public DbSet<DealerSale> DealerSales => Set<DealerSale>();
+    public DbSet<CraftsmanNotification> CraftsmanNotifications => Set<CraftsmanNotification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -199,6 +200,10 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         modelBuilder.Entity<DealerSale>(entity =>
         {
             entity.ToTable("DealerSales", table => table.HasCheckConstraint("CK_DealerSales_TotalAmount", "[TotalAmount] >= 0")); entity.HasKey(x => x.Id); entity.Property(x => x.SaleReference).HasMaxLength(80).IsRequired(); entity.Property(x => x.TotalAmount).HasPrecision(18, 2); entity.HasIndex(x => new { x.DealerId, x.SaleReference }).IsUnique(); entity.HasIndex(x => x.MembershipPassId).IsUnique(); entity.HasOne(x => x.Dealer).WithMany().HasForeignKey(x => x.DealerId).OnDelete(DeleteBehavior.Restrict); entity.HasOne(x => x.DealerEmployee).WithMany().HasForeignKey(x => x.DealerEmployeeId).OnDelete(DeleteBehavior.Restrict); entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict); entity.HasOne(x => x.MembershipPass).WithMany().HasForeignKey(x => x.MembershipPassId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<CraftsmanNotification>(entity =>
+        {
+            entity.ToTable("CraftsmanNotifications"); entity.HasKey(x => x.Id); entity.Property(x => x.Type).HasMaxLength(30).IsRequired(); entity.Property(x => x.Title).HasMaxLength(140).IsRequired(); entity.Property(x => x.Message).HasMaxLength(500).IsRequired(); entity.Property(x => x.ReferenceType).HasMaxLength(40); entity.HasIndex(x => new { x.CraftsmanId, x.CreatedAtUtc }); entity.HasIndex(x => new { x.CraftsmanId, x.ReadAtUtc }); entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

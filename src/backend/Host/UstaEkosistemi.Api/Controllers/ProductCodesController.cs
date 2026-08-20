@@ -70,6 +70,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
             Description = multiplier > 1 ? $"{productCode.Product.Name} · {multiplier:0.##}X kampanya puanı" : $"{productCode.Product.Name} ürün kodu puanı"
         };
         dbContext.PointLedgerEntries.Add(ledgerEntry);
+        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = request.CraftsmanId, Type = "PointsEarned", Title = $"{earnedPoints:N0} puan kazandınız", Message = $"{productCode.Product.Name} ürün kodu başarıyla kullanıldı.", ReferenceType = nameof(ProductCode), ReferenceId = productCode.Id });
         var qualifyingPoints = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == request.CraftsmanId && x.Amount > 0).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
         var loyaltyConfig = await dbContext.LoyaltyConfigurations.AsNoTracking().SingleAsync(x => x.Id == LoyaltyConfiguration.DefaultId, cancellationToken);
         craftsman.Level = LoyaltyPolicy.GetLevel(qualifyingPoints + earnedPoints, loyaltyConfig.SilverThreshold, loyaltyConfig.GoldThreshold);
@@ -115,6 +116,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
             ReferenceId = productCode.Id,
             Description = $"Ürün iadesi · {reason}"
         });
+        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = productCode.RedeemedByCraftsmanId.Value, Type = "Return", Title = "Ürün iadesi işlendi", Message = $"{productCode.Product.Name} iadesi nedeniyle {originalEntry.Amount:N0} puan geri alındı. Neden: {reason}", ReferenceType = nameof(ProductCode), ReferenceId = productCode.Id });
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var balance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == productCode.RedeemedByCraftsmanId.Value).SumAsync(x => x.Amount, cancellationToken);
