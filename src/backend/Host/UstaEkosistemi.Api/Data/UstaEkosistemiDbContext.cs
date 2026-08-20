@@ -26,6 +26,8 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<ReportExportAudit> ReportExportAudits => Set<ReportExportAudit>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
     public DbSet<AdminSession> AdminSessions => Set<AdminSession>();
+    public DbSet<MembershipPass> MembershipPasses => Set<MembershipPass>();
+    public DbSet<DealerSale> DealerSales => Set<DealerSale>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -189,6 +191,14 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         modelBuilder.Entity<AdminSession>(entity =>
         {
             entity.ToTable("AdminSessions"); entity.HasKey(x => x.Id); entity.Property(x => x.TokenHash).HasMaxLength(64).IsFixedLength().IsRequired(); entity.HasIndex(x => x.TokenHash).IsUnique(); entity.HasIndex(x => new { x.AdminUserId, x.ExpiresAtUtc }); entity.HasOne(x => x.AdminUser).WithMany(x => x.Sessions).HasForeignKey(x => x.AdminUserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<MembershipPass>(entity =>
+        {
+            entity.ToTable("MembershipPasses"); entity.HasKey(x => x.Id); entity.Property(x => x.TokenHash).HasMaxLength(64).IsFixedLength().IsRequired(); entity.HasIndex(x => x.TokenHash).IsUnique(); entity.HasIndex(x => new { x.CraftsmanId, x.ExpiresAtUtc }); entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<DealerSale>(entity =>
+        {
+            entity.ToTable("DealerSales", table => table.HasCheckConstraint("CK_DealerSales_TotalAmount", "[TotalAmount] >= 0")); entity.HasKey(x => x.Id); entity.Property(x => x.SaleReference).HasMaxLength(80).IsRequired(); entity.Property(x => x.TotalAmount).HasPrecision(18, 2); entity.HasIndex(x => new { x.DealerId, x.SaleReference }).IsUnique(); entity.HasIndex(x => x.MembershipPassId).IsUnique(); entity.HasOne(x => x.Dealer).WithMany().HasForeignKey(x => x.DealerId).OnDelete(DeleteBehavior.Restrict); entity.HasOne(x => x.DealerEmployee).WithMany().HasForeignKey(x => x.DealerEmployeeId).OnDelete(DeleteBehavior.Restrict); entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Restrict); entity.HasOne(x => x.MembershipPass).WithMany().HasForeignKey(x => x.MembershipPassId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

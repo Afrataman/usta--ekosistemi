@@ -249,6 +249,12 @@ export async function reportDealerRisk(request: { referenceType: string; referen
   if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Şüpheli işlem bildirilemedi.')
   return body
 }
+export type MembershipPassResult = { token: string; expiresAtUtc: string }
+export async function createMembershipPass(craftsmanId: string): Promise<MembershipPassResult> { const response = await fetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/membership-pass`, { method: 'POST' }); if (!response.ok) throw new Error('Üyelik QR’ı oluşturulamadı.'); return response.json() as Promise<MembershipPassResult> }
+export type VerifiedMembership = { id: string; expiresAtUtc: string; craftsman: string; level: string }
+export async function verifyMembershipPass(token: string): Promise<VerifiedMembership> { const response = await fetch(`${apiBaseUrl}/api/dealer/membership-passes/${encodeURIComponent(token)}`, { headers: dealerHeaders() }); const body = await response.json() as VerifiedMembership & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Üyelik QR’ı doğrulanamadı.'); return body }
+export type DealerSaleResult = { id: string; saleReference: string; totalAmount: number; craftsman: string; createdAtUtc: string }
+export async function createDealerSale(membershipToken: string, saleReference: string, totalAmount: number): Promise<DealerSaleResult> { const response = await fetch(`${apiBaseUrl}/api/dealer/sales`, { method: 'POST', headers: dealerHeaders(), body: JSON.stringify({ membershipToken, saleReference, totalAmount }) }); const body = await response.json() as DealerSaleResult & { message?: string; detail?: string }; if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Satış eşleştirilemedi.'); return body }
 
 export type AdminOverview = { craftsmen: number; dealers: number; activeCoupons: number; openRiskCases: number }
 export type AdminRiskCase = { id: string; referenceType: string; referenceValue: string; reason: string; description: string; status: 'Open' | 'InReview' | 'Resolved' | 'Rejected'; createdAtUtc: string; reviewedAtUtc: string | null; dealerEmployee: string; dealer: string }
