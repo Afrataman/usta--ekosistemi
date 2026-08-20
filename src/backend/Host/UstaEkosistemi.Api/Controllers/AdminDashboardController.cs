@@ -25,7 +25,8 @@ public sealed class AdminDashboardController(UstaEkosistemiDbContext dbContext) 
         {
             x.Id, x.ReferenceType, x.ReferenceValue, x.Reason, x.Description, status = x.Status.ToString(), x.CreatedAtUtc, x.ReviewedAtUtc,
             dealerEmployee = x.ReportedByDealerEmployee.FullName,
-            dealer = x.ReportedByDealerEmployee.Dealer.Name
+            dealer = x.ReportedByDealerEmployee.Dealer.Name,
+            actions = x.Actions.OrderBy(a => a.CreatedAtUtc).Select(a => new { a.Id, status = a.Status.ToString(), a.DecisionNote, reviewer = a.AdminUser.FullName, a.CreatedAtUtc })
         }).ToListAsync(cancellationToken);
         return Ok(items);
     }
@@ -34,12 +35,16 @@ public sealed class AdminDashboardController(UstaEkosistemiDbContext dbContext) 
     public async Task<IActionResult> UpdateRiskStatus(Guid id, UpdateRiskStatusRequest request, CancellationToken cancellationToken)
     {
         if (!Enum.TryParse<RiskCaseStatus>(request.Status, true, out var status) || status == RiskCaseStatus.Open) return ValidationProblem("Durum InReview, Resolved veya Rejected olmalıdır.");
+        var note = request.DecisionNote.Trim();
+        if (note.Length is < 5 or > 1000) return ValidationProblem("İnceleme veya karar notu 5–1000 karakter olmalıdır.");
+        if (HttpContext.Items["AdminUserId"] is not Guid adminUserId) return Unauthorized(new { message = "Yönetici oturumu bulunamadı." });
         var item = await dbContext.RiskCases.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (item is null) return NotFound(new { message = "Şüpheli işlem kaydı bulunamadı." });
         item.Status = status; item.ReviewedAtUtc = status == RiskCaseStatus.InReview ? null : DateTimeOffset.UtcNow;
+        dbContext.RiskCaseActions.Add(new RiskCaseAction { RiskCaseId = item.Id, AdminUserId = adminUserId, Status = status, DecisionNote = note });
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { item.Id, status = item.Status.ToString(), item.ReviewedAtUtc });
     }
 }
 
-public sealed record UpdateRiskStatusRequest(string Status);
+public sealed record UpdateRiskStatusRequest(string Status, string DecisionNote);

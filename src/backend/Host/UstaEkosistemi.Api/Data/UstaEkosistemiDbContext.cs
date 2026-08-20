@@ -20,6 +20,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<DealerEmployee> DealerEmployees => Set<DealerEmployee>();
     public DbSet<DealerSession> DealerSessions => Set<DealerSession>();
     public DbSet<RiskCase> RiskCases => Set<RiskCase>();
+    public DbSet<RiskCaseAction> RiskCaseActions => Set<RiskCaseAction>();
     public DbSet<RewardAuditEntry> RewardAuditEntries => Set<RewardAuditEntry>();
     public DbSet<LoyaltyConfiguration> LoyaltyConfigurations => Set<LoyaltyConfiguration>();
     public DbSet<LoyaltyConfigurationAudit> LoyaltyConfigurationAudits => Set<LoyaltyConfigurationAudit>();
@@ -126,6 +127,10 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         modelBuilder.Entity<RiskCase>(entity =>
         {
             entity.ToTable("RiskCases"); entity.HasKey(x => x.Id); entity.Property(x => x.ReferenceType).HasMaxLength(30).IsRequired(); entity.Property(x => x.ReferenceValue).HasMaxLength(120).IsRequired(); entity.Property(x => x.Reason).HasMaxLength(80).IsRequired(); entity.Property(x => x.Description).HasMaxLength(1000).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20); entity.HasIndex(x => new { x.Status, x.CreatedAtUtc }); entity.HasOne(x => x.ReportedByDealerEmployee).WithMany().HasForeignKey(x => x.ReportedByDealerEmployeeId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<RiskCaseAction>(entity =>
+        {
+            entity.ToTable("RiskCaseActions"); entity.HasKey(x => x.Id); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20); entity.Property(x => x.DecisionNote).HasMaxLength(1000).IsRequired(); entity.HasIndex(x => new { x.RiskCaseId, x.CreatedAtUtc }); entity.HasOne(x => x.RiskCase).WithMany(x => x.Actions).HasForeignKey(x => x.RiskCaseId).OnDelete(DeleteBehavior.Cascade); entity.HasOne(x => x.AdminUser).WithMany().HasForeignKey(x => x.AdminUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<RewardAuditEntry>(entity =>
