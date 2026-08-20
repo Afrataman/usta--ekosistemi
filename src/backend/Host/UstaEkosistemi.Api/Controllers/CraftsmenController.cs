@@ -55,7 +55,17 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : Con
             .Select(x => new { x.Id, x.Amount, x.TransactionType, x.Description, x.CreatedAtUtc })
             .ToListAsync(cancellationToken);
 
-        return Ok(new { craftsman.Id, craftsman.FullName, craftsman.Level, balance, movements });
+        return Ok(new
+        {
+            craftsman.Id,
+            craftsman.FullName,
+            craftsman.Level,
+            balance,
+            availablePoints = Math.Max(0, balance),
+            pointDebt = Math.Max(0, -balance),
+            canRedeemRewards = balance >= 0,
+            movements
+        });
     }
 
     [HttpGet("{id:guid}/profile")]
@@ -90,7 +100,21 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : Con
         var qualifyingPoints = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == id && x.Amount > 0).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
         var loyaltyConfig = await dbContext.LoyaltyConfigurations.AsNoTracking().SingleAsync(x => x.Id == LoyaltyConfiguration.DefaultId, cancellationToken);
         var level = LoyaltyPolicy.GetLevel(qualifyingPoints, loyaltyConfig.SilverThreshold, loyaltyConfig.GoldThreshold);
-        return Ok(new { craftsmanId = craftsman.Id, craftsman.FullName, level = level.ToString(), balance, rewardValueTry = balance / loyaltyConfig.PointsPerRewardTry, pointsToNextLevel = LoyaltyPolicy.PointsToNextLevel(qualifyingPoints, loyaltyConfig.SilverThreshold, loyaltyConfig.GoldThreshold), movements, updatedAtUtc = DateTimeOffset.UtcNow });
+        var availablePoints = Math.Max(0, balance);
+        return Ok(new
+        {
+            craftsmanId = craftsman.Id,
+            craftsman.FullName,
+            level = level.ToString(),
+            balance,
+            availablePoints,
+            pointDebt = Math.Max(0, -balance),
+            canRedeemRewards = balance >= 0,
+            rewardValueTry = availablePoints / loyaltyConfig.PointsPerRewardTry,
+            pointsToNextLevel = LoyaltyPolicy.PointsToNextLevel(qualifyingPoints, loyaltyConfig.SilverThreshold, loyaltyConfig.GoldThreshold),
+            movements,
+            updatedAtUtc = DateTimeOffset.UtcNow
+        });
     }
 
     [HttpPut("{id:guid}/profile")]

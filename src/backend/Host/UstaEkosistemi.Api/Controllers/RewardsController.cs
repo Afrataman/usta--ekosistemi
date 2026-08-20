@@ -74,6 +74,15 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
         var balance = await dbContext.PointLedgerEntries
             .Where(x => x.CraftsmanId == request.CraftsmanId)
             .SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
+        if (balance < 0)
+        {
+            return Conflict(new
+            {
+                message = $"İade sonrası {-balance:N0} puan açığınız bulunuyor. Açık kapanana kadar yeni ödül alınamaz.",
+                pointDebt = -balance,
+                canRedeemRewards = false
+            });
+        }
         if (balance < reward.PointCost)
         {
             return Conflict(new { message = "Bu ödül için yeterli puanınız yok." });

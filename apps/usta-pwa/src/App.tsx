@@ -19,6 +19,9 @@ const fallbackDashboard: Dashboard = {
   fullName: 'Ahmet Usta',
   level: 'Silver',
   balance: 10_000,
+  availablePoints: 10_000,
+  pointDebt: 0,
+  canRedeemRewards: true,
   rewardValueTry: 500,
   pointsToNextLevel: 2_500,
   movements: [
@@ -28,7 +31,7 @@ const fallbackDashboard: Dashboard = {
   ],
   updatedAtUtc: new Date(0).toISOString(),
 }
-function cachedDashboard() { try { const value = localStorage.getItem('usta-dashboard-cache'); return value ? JSON.parse(value) as Dashboard : fallbackDashboard } catch { return fallbackDashboard } }
+function cachedDashboard() { try { const value = localStorage.getItem('usta-dashboard-cache'); return value ? { ...fallbackDashboard, ...JSON.parse(value) as Dashboard } : fallbackDashboard } catch { return fallbackDashboard } }
 
 const numberFormatter = new Intl.NumberFormat('tr-TR')
 const dateFormatter = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -53,8 +56,9 @@ function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dash
       <p className="hello">Merhaba {dashboard.fullName} 👋 <i className={connected ? 'api-dot connected' : 'api-dot'} title={connected ? 'SQL Server bağlantısı açık' : 'Örnek veriler gösteriliyor'} /></p>
 
       <section className="points-card">
-        <div><strong>{numberFormatter.format(dashboard.balance)} <small>puan</small></strong><p>Bu puanla alabileceğiniz ödüllerin<br />değeri: {numberFormatter.format(dashboard.rewardValueTry)} TL'ye kadar</p></div><span className="gift-art">♙</span>
+        <div><strong>{numberFormatter.format(dashboard.availablePoints)} <small>puan</small></strong><p>Bu puanla alabileceğiniz ödüllerin<br />değeri: {numberFormatter.format(dashboard.rewardValueTry)} TL'ye kadar</p></div><span className="gift-art">♙</span>
       </section>
+      {dashboard.pointDebt > 0 && <div className="point-debt-warning"><strong>{numberFormatter.format(dashboard.pointDebt)} puan açığınız var</strong><span>İade sonrası oluşan açık kapanana kadar yeni ödül alamazsınız. Kazandığınız yeni puanlar önce bu açığı kapatır.</span></div>}
 
       <section className="level-card">
         <div className="medal">★</div><div className="level-copy"><strong>{levelNames[dashboard.level] ?? dashboard.level} Seviye</strong><div className="level-progress"><i /></div><span>Altın seviyeye {numberFormatter.format(dashboard.pointsToNextLevel)} puan</span></div><b>★</b>
@@ -179,7 +183,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   )
 }
 
-function Rewards({ balance, craftsmanId, onBalanceChanged }: { balance: number; craftsmanId: string; onBalanceChanged: () => Promise<void> }) {
+function Rewards({ availablePoints, pointDebt, craftsmanId, onBalanceChanged }: { availablePoints: number; pointDebt: number; craftsmanId: string; onBalanceChanged: () => Promise<void> }) {
   const [filter, setFilter] = useState<'all' | Reward['deliveryType']>('all')
   const [catalog, setCatalog] = useState(fallbackRewards)
   const [connected, setConnected] = useState(false)
@@ -220,12 +224,13 @@ function Rewards({ balance, craftsmanId, onBalanceChanged }: { balance: number; 
 
   return (
     <>
-      <header className="rewards-header"><h1>Ödüller</h1><strong>{numberFormatter.format(balance)} <small>puan</small></strong></header>
+      <header className="rewards-header"><h1>Ödüller</h1><strong>{numberFormatter.format(availablePoints)} <small>puan</small></strong></header>
+      {pointDebt > 0 && <div className="point-debt-warning"><strong>{numberFormatter.format(pointDebt)} puan açığınız var</strong><span>Açık kapanana kadar ödül alımı geçici olarak durduruldu.</span></div>}
       <div className="filters"><button className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')} type="button">Tümü</button><button className={filter === 'Digital' ? 'selected' : ''} onClick={() => setFilter('Digital')} type="button">Dijital</button><button className={filter === 'DealerPickup' ? 'selected' : ''} onClick={() => setFilter('DealerPickup')} type="button">Bayiden Teslim</button></div>
       <div className={connected ? 'catalog-source connected' : 'catalog-source'}>{connected ? 'Canlı katalog' : 'Örnek katalog'}</div>
       <div className="rewards-grid">
         {catalog.map((reward) => <article className="reward-product" key={reward.id} title={reward.description}>
-          {reward.deliveryType === 'DealerPickup' && <span className="delivery">Bayiden Teslim</span>}<div className="product-art">{rewardArt[reward.imageKey] ?? '🎁'}</div><h2>{reward.name}</h2><p>{numberFormatter.format(reward.pointCost)} puan</p><button onClick={() => { setSelectedReward(reward); setRedemptionRequestId(crypto.randomUUID()); setRedemption(null); setRedemptionError('') }} disabled={!reward.isAvailable || balance < reward.pointCost || !craftsmanId} type="button">{!reward.isAvailable ? 'Stokta Yok' : balance < reward.pointCost ? 'Puan Yetersiz' : reward.deliveryType === 'Digital' ? 'İncele' : 'Ödülü Al'}</button>
+          {reward.deliveryType === 'DealerPickup' && <span className="delivery">Bayiden Teslim</span>}<div className="product-art">{rewardArt[reward.imageKey] ?? '🎁'}</div><h2>{reward.name}</h2><p>{numberFormatter.format(reward.pointCost)} puan</p><button onClick={() => { setSelectedReward(reward); setRedemptionRequestId(crypto.randomUUID()); setRedemption(null); setRedemptionError('') }} disabled={!reward.isAvailable || pointDebt > 0 || availablePoints < reward.pointCost || !craftsmanId} type="button">{!reward.isAvailable ? 'Stokta Yok' : pointDebt > 0 ? 'Puan Açığı Var' : availablePoints < reward.pointCost ? 'Puan Yetersiz' : reward.deliveryType === 'Digital' ? 'İncele' : 'Ödülü Al'}</button>
         </article>)}
       </div>
       <div className="points-note">ⓘ <span>Puanlar nakit değildir; yalnızca program ödüllerinde kullanılır.</span></div>
@@ -250,13 +255,15 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
     return () => controller.abort()
   }, [dashboard.craftsmanId, dashboard.balance])
 
-  const balance = wallet?.balance ?? dashboard.balance
+  const availablePoints = wallet?.availablePoints ?? dashboard.availablePoints
+  const pointDebt = wallet?.pointDebt ?? dashboard.pointDebt
   const movements = wallet?.movements ?? dashboard.movements.map((movement, index) => ({ ...movement, id: String(index), transactionType: 0 }))
 
   return <>
     <header className="wallet-header"><div><span>PUAN CÜZDANI</span><h1>{dashboard.fullName}</h1></div><b>{levelNames[dashboard.level] ?? dashboard.level}</b></header>
-    <section className="wallet-balance"><span>Toplam puanın</span><strong>{numberFormatter.format(balance)} <small>puan</small></strong><p>Bu puanla alabileceğin ödüllerin değeri: <b>{numberFormatter.format(Math.floor(balance / 20))} TL'ye kadar</b></p></section>
-    <div className="wallet-actions"><button onClick={() => go('scan')} type="button"><span>▦</span>Puan Kazan</button><button onClick={() => go('rewards')} type="button"><span>♙</span>Ödüllere Git</button></div>
+    <section className="wallet-balance"><span>Kullanılabilir puanın</span><strong>{numberFormatter.format(availablePoints)} <small>puan</small></strong><p>Bu puanla alabileceğin ödüllerin değeri: <b>{numberFormatter.format(Math.floor(availablePoints / 20))} TL'ye kadar</b></p></section>
+    {pointDebt > 0 && <div className="point-debt-warning"><strong>{numberFormatter.format(pointDebt)} puan açığınız var</strong><span>İade edilen üründen kazanılan puan geri alındı. Yeni puanlarınız önce bu açığı kapatacak.</span></div>}
+    <div className="wallet-actions"><button onClick={() => go('scan')} type="button"><span>▦</span>Puan Kazan</button><button onClick={() => go('rewards')} disabled={pointDebt > 0} type="button"><span>♙</span>{pointDebt > 0 ? 'Ödüller Kilitli' : 'Ödüllere Git'}</button></div>
     <div className="wallet-title"><h2>Puan hareketleri</h2><button type="button">Tümü</button></div>
     {error && <p className="wallet-error">Bağlantı kurulamadı; son bilinen hareketler gösteriliyor.</p>}
     <section className="wallet-movements">
@@ -592,7 +599,7 @@ function CraftsmanApp() {
     {!online && <div className="offline-banner">⌁ Çevrimdışısın — kayıtlı bakiye gösteriliyor. Son güncelleme: {dashboard.updatedAtUtc === fallbackDashboard.updatedAtUtc ? 'bilinmiyor' : dateFormatter.format(new Date(dashboard.updatedAtUtc))}</div>}
     {screen === 'home' && <Home go={setScreen} dashboard={dashboard} connected={connected} />}
     {screen === 'scan' && <Scanner back={() => setScreen('home')} craftsmanId={dashboard.craftsmanId} onRedeemed={refreshDashboard} />}
-    {screen === 'rewards' && <Rewards balance={dashboard.balance} craftsmanId={dashboard.craftsmanId} onBalanceChanged={refreshDashboard} />}
+    {screen === 'rewards' && <Rewards availablePoints={dashboard.availablePoints} pointDebt={dashboard.pointDebt} craftsmanId={dashboard.craftsmanId} onBalanceChanged={refreshDashboard} />}
     {screen === 'wallet' && <Wallet dashboard={dashboard} go={setScreen} />}
     {screen === 'coupons' && <Coupons craftsmanId={dashboard.craftsmanId} back={() => setScreen('home')} />}
     {screen === 'campaigns' && <Campaigns back={() => setScreen('home')} />}

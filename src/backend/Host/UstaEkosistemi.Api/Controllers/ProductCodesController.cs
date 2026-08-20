@@ -108,11 +108,15 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
         if (productCode.Status == ProductCodeStatus.Returned)
         {
             var existingReversal = await dbContext.PointLedgerEntries.AsNoTracking().SingleAsync(x => x.ReferenceType == nameof(ProductCode) && x.ReferenceId == productCode.Id && x.TransactionType == PointTransactionType.ReturnReversal, cancellationToken);
-            return Ok(new { alreadyProcessed = true, reversedPoints = -existingReversal.Amount, productCode.ReturnedAtUtc, productCode.ReturnReason });
+            var existingBalance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == existingReversal.CraftsmanId).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
+            return Ok(new { alreadyProcessed = true, reversedPoints = -existingReversal.Amount, balance = existingBalance, pointDebt = Math.Max(0, -existingBalance), rewardRedemptionRestricted = existingBalance < 0, product = productCode.Product.Name, productCode.ReturnedAtUtc, productCode.ReturnReason });
         }
         if (productCode.Status != ProductCodeStatus.Redeemed || !productCode.RedeemedByCraftsmanId.HasValue) return Conflict(new { message = "Yalnızca kullanılmış ürün kodları iade edilebilir." });
 
         var originalEntry = await dbContext.PointLedgerEntries.SingleAsync(x => x.ReferenceType == nameof(ProductCode) && x.ReferenceId == productCode.Id && x.TransactionType == PointTransactionType.ProductCodeEarned, cancellationToken);
+        var currentBalance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == productCode.RedeemedByCraftsmanId.Value).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
+        var balance = currentBalance - originalEntry.Amount;
+        var pointDebt = Math.Max(0, -balance);
         var reason = request.Reason.Trim();
         productCode.Status = ProductCodeStatus.Returned;
         productCode.ReturnedAtUtc = DateTimeOffset.UtcNow;
@@ -127,11 +131,11 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
             ReferenceId = productCode.Id,
             Description = $"Ürün iadesi · {reason}"
         });
-        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = productCode.RedeemedByCraftsmanId.Value, Type = "Return", Title = "Ürün iadesi işlendi", Message = $"{productCode.Product.Name} iadesi nedeniyle {originalEntry.Amount:N0} puan geri alındı. Neden: {reason}", ReferenceType = nameof(ProductCode), ReferenceId = productCode.Id });
+        var debtMessage = pointDebt > 0 ? $" Hesabınızda {pointDebt:N0} puan açığı oluştu; açık kapanana kadar yeni ödül alınamaz." : string.Empty;
+        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = productCode.RedeemedByCraftsmanId.Value, Type = "Return", Title = "Ürün iadesi işlendi", Message = $"{productCode.Product.Name} iadesi nedeniyle {originalEntry.Amount:N0} puan geri alındı. Neden: {reason}.{debtMessage}", ReferenceType = nameof(ProductCode), ReferenceId = productCode.Id });
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        var balance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == productCode.RedeemedByCraftsmanId.Value).SumAsync(x => x.Amount, cancellationToken);
-        return Ok(new { alreadyProcessed = false, reversedPoints = originalEntry.Amount, balance, product = productCode.Product.Name, productCode.ReturnedAtUtc });
+        return Ok(new { alreadyProcessed = false, reversedPoints = originalEntry.Amount, balance, pointDebt, rewardRedemptionRestricted = pointDebt > 0, product = productCode.Product.Name, productCode.ReturnedAtUtc });
     }
 }
 

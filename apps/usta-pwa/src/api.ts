@@ -9,6 +9,9 @@ export type Dashboard = {
   fullName: string
   level: string
   balance: number
+  availablePoints: number
+  pointDebt: number
+  canRedeemRewards: boolean
   rewardValueTry: number
   pointsToNextLevel: number
   movements: DashboardMovement[]
@@ -78,6 +81,9 @@ export type Wallet = {
   fullName: string
   level: number
   balance: number
+  availablePoints: number
+  pointDebt: number
+  canRedeemRewards: boolean
   movements: WalletMovement[]
 }
 
@@ -268,7 +274,7 @@ export async function fulfillDealerCoupon(code: string): Promise<DealerCoupon> {
   return body
 }
 
-export type ProductReturnResult = { alreadyProcessed: boolean; reversedPoints: number; balance?: number; product?: string; returnedAtUtc: string; returnReason?: string }
+export type ProductReturnResult = { alreadyProcessed: boolean; reversedPoints: number; balance?: number; pointDebt: number; rewardRedemptionRestricted: boolean; product?: string; returnedAtUtc: string; returnReason?: string }
 export async function returnDealerProduct(code: string, reason: string): Promise<ProductReturnResult> {
   const response = await fetch(`${apiBaseUrl}/api/product-codes/return`, { method: 'POST', headers: dealerHeaders(), body: JSON.stringify({ code, reason }) })
   const body = await response.json() as ProductReturnResult & { message?: string; detail?: string }
