@@ -26,7 +26,7 @@ public sealed class AdminManagementController(UstaEkosistemiDbContext dbContext)
     {
         var item = await dbContext.Craftsmen.SingleOrDefaultAsync(x => x.Id == id, token);
         if (item is null) return NotFound(new { message = "Usta bulunamadı." });
-        item.IsActive = request.IsActive; await dbContext.SaveChangesAsync(token);
+        item.IsActive = request.IsActive; dbContext.AddAdminAudit(HttpContext, "ActiveStatusChanged", nameof(Craftsman), item.Id, $"Usta durumu: {(request.IsActive ? "Aktif" : "Pasif")}"); await dbContext.SaveChangesAsync(token);
         return Ok(new { item.Id, item.IsActive });
     }
 
@@ -54,6 +54,7 @@ public sealed class AdminManagementController(UstaEkosistemiDbContext dbContext)
             var sessions = await dbContext.DealerSessions.Where(x => x.DealerEmployee.DealerId == id && x.RevokedAtUtc == null && x.ExpiresAtUtc > now).ToListAsync(token);
             foreach (var session in sessions) session.RevokedAtUtc = now;
         }
+        dbContext.AddAdminAudit(HttpContext, "ActiveStatusChanged", nameof(Dealer), item.Id, $"Bayi durumu: {(request.IsActive ? "Aktif" : "Pasif")}; açık oturumlar: {(request.IsActive ? "korundu" : "kapatıldı")}");
         await dbContext.SaveChangesAsync(token);
         return Ok(new { item.Id, item.IsActive });
     }
@@ -69,7 +70,7 @@ public sealed class AdminManagementController(UstaEkosistemiDbContext dbContext)
         var securedPin = OtpCodeHasher.Hash(request.EmployeePin);
         var dealer = new Dealer { Code = code, Name = name };
         var employee = new DealerEmployee { DealerId = dealer.Id, FullName = request.EmployeeFullName.Trim(), PinHash = securedPin.Hash, PinSalt = securedPin.Salt };
-        dbContext.Dealers.Add(dealer); dbContext.DealerEmployees.Add(employee);
+        dbContext.Dealers.Add(dealer); dbContext.DealerEmployees.Add(employee); dbContext.AddAdminAudit(HttpContext, "DealerOnboarded", nameof(Dealer), dealer.Id, $"Bayi={dealer.Code} · {dealer.Name}; ilk çalışan={employee.FullName}");
         await dbContext.SaveChangesAsync(token);
         return Created($"/api/admin/dealers/{dealer.Id}", new { dealer.Id, dealer.Code, dealer.Name, employeeId = employee.Id, employee = employee.FullName, warning = "Erişim kodunu yalnızca ilgili çalışana güvenli biçimde iletin." });
     }
@@ -93,7 +94,7 @@ public sealed class AdminManagementController(UstaEkosistemiDbContext dbContext)
         if (await PinExists(dealerId, request.Pin, null, token)) return Conflict(new { message = "Bu çalışan kodu aynı bayide başka bir çalışana atanmış." });
         var securedPin = OtpCodeHasher.Hash(request.Pin);
         var employee = new DealerEmployee { DealerId = dealer.Id, FullName = request.FullName.Trim(), PinHash = securedPin.Hash, PinSalt = securedPin.Salt };
-        dbContext.DealerEmployees.Add(employee); await dbContext.SaveChangesAsync(token);
+        dbContext.DealerEmployees.Add(employee); dbContext.AddAdminAudit(HttpContext, "EmployeeCreated", nameof(DealerEmployee), employee.Id, $"Bayi={dealer.Code}; çalışan={employee.FullName}"); await dbContext.SaveChangesAsync(token);
         return Ok(new { employee.Id, employee.DealerId, employee.FullName, employee.IsActive, hasAccessCode = true });
     }
 
@@ -105,7 +106,7 @@ public sealed class AdminManagementController(UstaEkosistemiDbContext dbContext)
         if (employee is null) return NotFound(new { message = "Bayi çalışanı bulunamadı." });
         if (await PinExists(dealerId, request.Pin, id, token)) return Conflict(new { message = "Bu çalışan kodu aynı bayide başka bir çalışana atanmış." });
         var securedPin = OtpCodeHasher.Hash(request.Pin); employee.PinHash = securedPin.Hash; employee.PinSalt = securedPin.Salt;
-        await RevokeSessions(id, token); await dbContext.SaveChangesAsync(token);
+        await RevokeSessions(id, token); dbContext.AddAdminAudit(HttpContext, "AccessCodeReset", nameof(DealerEmployee), employee.Id, $"Çalışan={employee.FullName}; açık oturumlar kapatıldı"); await dbContext.SaveChangesAsync(token);
         return Ok(new { employee.Id, message = "Çalışan kodu yenilendi; açık oturumlar kapatıldı." });
     }
 
@@ -115,6 +116,7 @@ public sealed class AdminManagementController(UstaEkosistemiDbContext dbContext)
         var employee = await dbContext.DealerEmployees.SingleOrDefaultAsync(x => x.Id == id && x.DealerId == dealerId, token);
         if (employee is null) return NotFound(new { message = "Bayi çalışanı bulunamadı." });
         employee.IsActive = request.IsActive; if (!request.IsActive) await RevokeSessions(id, token);
+        dbContext.AddAdminAudit(HttpContext, "ActiveStatusChanged", nameof(DealerEmployee), employee.Id, $"Çalışan={employee.FullName}; durum={(request.IsActive ? "Aktif" : "Pasif")}");
         await dbContext.SaveChangesAsync(token); return Ok(new { employee.Id, employee.IsActive });
     }
 

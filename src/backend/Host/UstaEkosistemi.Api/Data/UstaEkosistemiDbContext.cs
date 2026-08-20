@@ -27,6 +27,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<ReportExportAudit> ReportExportAudits => Set<ReportExportAudit>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
     public DbSet<AdminSession> AdminSessions => Set<AdminSession>();
+    public DbSet<AdminAuditEntry> AdminAuditEntries => Set<AdminAuditEntry>();
     public DbSet<MembershipPass> MembershipPasses => Set<MembershipPass>();
     public DbSet<DealerSale> DealerSales => Set<DealerSale>();
     public DbSet<CraftsmanNotification> CraftsmanNotifications => Set<CraftsmanNotification>();
@@ -203,6 +204,10 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         modelBuilder.Entity<AdminSession>(entity =>
         {
             entity.ToTable("AdminSessions"); entity.HasKey(x => x.Id); entity.Property(x => x.TokenHash).HasMaxLength(64).IsFixedLength().IsRequired(); entity.HasIndex(x => x.TokenHash).IsUnique(); entity.HasIndex(x => new { x.AdminUserId, x.ExpiresAtUtc }); entity.HasOne(x => x.AdminUser).WithMany(x => x.Sessions).HasForeignKey(x => x.AdminUserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AdminAuditEntry>(entity =>
+        {
+            entity.ToTable("AdminAuditEntries"); entity.HasKey(x => x.Id); entity.Property(x => x.Actor).HasMaxLength(120).IsRequired(); entity.Property(x => x.Action).HasMaxLength(60).IsRequired(); entity.Property(x => x.EntityType).HasMaxLength(60).IsRequired(); entity.Property(x => x.Details).HasMaxLength(1000).IsRequired(); entity.HasIndex(x => x.CreatedAtUtc); entity.HasIndex(x => new { x.EntityType, x.EntityId }); entity.HasOne(x => x.AdminUser).WithMany().HasForeignKey(x => x.AdminUserId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<MembershipPass>(entity =>
         {

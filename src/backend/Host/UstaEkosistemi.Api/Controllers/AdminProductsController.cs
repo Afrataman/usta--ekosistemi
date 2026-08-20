@@ -60,6 +60,7 @@ public sealed class AdminProductsController(UstaEkosistemiDbContext dbContext) :
         var result = await AnalyzeCodes(request.Codes, token);
         if (result.Rejected.Count > 0) return Conflict(new { message = "Dosyada geçersiz veya tekrar eden kodlar var. Önce doğrulama hatalarını düzeltin.", total = result.Total, valid = result.Valid, rejected = result.Rejected.Count, rejectedItems = result.Rejected });
         dbContext.ProductCodes.AddRange(result.Normalized.Select(code => new ProductCode { ProductId = product.Id, CodeHash = ProductCodeHasher.Hash(code) }));
+        dbContext.AddAdminAudit(HttpContext, "ProductCodesImported", nameof(Product), product.Id, $"SKU={product.Sku}; yüklenen kod={result.Normalized.Count}");
         await dbContext.SaveChangesAsync(token);
         return Ok(new { product.Id, product.Sku, imported = result.Normalized.Count, warning = "Kodların açık değerleri saklanmadı; yalnızca güvenli özetleri kaydedildi." });
     }

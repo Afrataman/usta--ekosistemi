@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
+using UstaEkosistemi.Api.Security;
 
 namespace UstaEkosistemi.Api.Controllers;
 
@@ -44,6 +45,7 @@ public sealed class AdminTransactionsController(UstaEkosistemiDbContext dbContex
             ReferenceType = "AdminAdjustment",
             ReferenceId = adjustmentId
         });
+        dbContext.AddAdminAudit(HttpContext, "PointAdjustment", nameof(Craftsman), craftsman.Id, $"Usta={craftsman.FullName}; miktar={request.Amount}; gerekçe={reason}");
         await dbContext.SaveChangesAsync(token);
         var balance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == craftsman.Id).SumAsync(x => (int?)x.Amount, token) ?? 0;
         return Ok(new { id = adjustmentId, craftsman = craftsman.FullName, request.Amount, reason, actorId, actor, balance, pointDebt = Math.Max(0, -balance), createdAtUtc = DateTimeOffset.UtcNow });
