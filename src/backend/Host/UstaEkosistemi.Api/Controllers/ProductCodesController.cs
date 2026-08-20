@@ -15,9 +15,9 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
     [HttpPost("redeem")]
     public async Task<IActionResult> Redeem(RedeemProductCodeRequest request, CancellationToken cancellationToken)
     {
-        if (request.CraftsmanId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code))
+        if (request.CraftsmanId == Guid.Empty || request.RequestId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code))
         {
-            return ValidationProblem("Usta ve ürün kodu zorunludur.");
+            return ValidationProblem("Usta, işlem anahtarı ve ürün kodu zorunludur.");
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -38,6 +38,12 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
 
         if (productCode.Status != ProductCodeStatus.Available)
         {
+            if (productCode.Status == ProductCodeStatus.Redeemed && productCode.RedeemedByCraftsmanId == request.CraftsmanId && productCode.RedemptionRequestId == request.RequestId)
+            {
+                var existingEntry = await dbContext.PointLedgerEntries.AsNoTracking().SingleAsync(x => x.ReferenceType == nameof(ProductCode) && x.ReferenceId == productCode.Id && x.TransactionType == PointTransactionType.ProductCodeEarned, cancellationToken);
+                var existingBalance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == request.CraftsmanId).SumAsync(x => x.Amount, cancellationToken);
+                return Ok(new { alreadyProcessed = true, earnedPoints = existingEntry.Amount, balance = existingBalance, product = productCode.Product.Name, campaignMultiplier = 1, level = craftsman.Level.ToString(), productCode.RedeemedAtUtc });
+            }
             return Conflict(new { message = "Bu ürün kodu daha önce kullanılmış veya iptal edilmiş." });
         }
 
@@ -49,6 +55,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
         productCode.Status = ProductCodeStatus.Redeemed;
         productCode.RedeemedByCraftsmanId = request.CraftsmanId;
         productCode.RedeemedAtUtc = DateTimeOffset.UtcNow;
+        productCode.RedemptionRequestId = request.RequestId;
 
         var now = DateTimeOffset.UtcNow;
         var multiplier = await dbContext.Campaigns.Where(x => x.IsActive && x.StartsAtUtc <= now && x.EndsAtUtc >= now).MaxAsync(x => (decimal?)x.PointMultiplier, cancellationToken) ?? 1;
@@ -73,7 +80,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
             .Where(x => x.CraftsmanId == request.CraftsmanId)
             .SumAsync(x => x.Amount, cancellationToken);
 
-        return Ok(new { earnedPoints = ledgerEntry.Amount, balance, product = productCode.Product.Name, campaignMultiplier = multiplier, level = craftsman.Level.ToString(), productCode.RedeemedAtUtc });
+        return Ok(new { alreadyProcessed = false, earnedPoints = ledgerEntry.Amount, balance, product = productCode.Product.Name, campaignMultiplier = multiplier, level = craftsman.Level.ToString(), productCode.RedeemedAtUtc });
     }
 
     [HttpPost("return")]
@@ -115,5 +122,5 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext) : 
     }
 }
 
-public sealed record RedeemProductCodeRequest(Guid CraftsmanId, string Code);
+public sealed record RedeemProductCodeRequest(Guid CraftsmanId, string Code, Guid RequestId);
 public sealed record ReturnProductCodeRequest(Guid DealerEmployeeId, string Code, string Reason);

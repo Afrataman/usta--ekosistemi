@@ -12,6 +12,7 @@ export type Dashboard = {
   rewardValueTry: number
   pointsToNextLevel: number
   movements: DashboardMovement[]
+  updatedAtUtc: string
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:5028'
@@ -47,6 +48,7 @@ export async function verifyOtpCode(challengeId: string, code: string): Promise<
 }
 
 export type RedeemResult = {
+  alreadyProcessed: boolean
   earnedPoints: number
   balance: number
   product: string
@@ -193,11 +195,11 @@ export async function getWallet(craftsmanId: string, signal?: AbortSignal): Prom
   return response.json() as Promise<Wallet>
 }
 
-export async function redeemProductCode(craftsmanId: string, code: string): Promise<RedeemResult> {
+export async function redeemProductCode(craftsmanId: string, code: string, requestId: string): Promise<RedeemResult> {
   const response = await fetch(`${apiBaseUrl}/api/product-codes/redeem`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ craftsmanId, code }),
+    body: JSON.stringify({ craftsmanId, code, requestId }),
   })
 
   if (!response.ok) {

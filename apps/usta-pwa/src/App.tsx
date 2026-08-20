@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { createAdminCampaign, createAdminProduct, createAdminReward, createSupportRequest, exportAdminLoyaltyReport, fulfillDealerCoupon, generateAdminProductCodes, getAdminCampaigns, getAdminCraftsmen, getAdminDealers, getAdminLoyaltyReport, getAdminLoyaltyRules, getAdminOverview, getAdminProducts, getAdminRewards, getAdminRiskCases, getAdminSupportRequests, getAdminTransactions, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getReportExportAudits, getRewardRedemptions, getRewards, getSupportRequests, getWallet, redeemProductCode, redeemReward, replyAdminSupportRequest, reportDealerRisk, requestOtpCode, returnDealerProduct, setAdminCampaignActive, setAdminEntityActive, updateAdminLoyaltyRules, updateAdminReward, updateAdminRiskStatus, updateAdminSupportRequest, updateCraftsmanProfile, verifyDealerCoupon, verifyOtpCode, type AdminCampaign, type AdminCraftsman, type AdminDealer, type AdminLoyaltyReport, type AdminOverview, type AdminProduct, type AdminReward, type AdminRiskCase, type AdminSupportRequest, type AdminTransactionResponse, type Campaign, type CraftsmanProfile, type Dashboard, type DealerCoupon, type LoyaltyRules, type ProductReturnResult, type ReportExportAudit, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
 import './App.css'
+import { clearPendingRedemptions, enqueueRedemption, getPendingRedemptions, removePendingRedemption } from './offlineQueue'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'campaigns' | 'notifications' | 'support' | 'profile'
 
@@ -24,7 +25,9 @@ const fallbackDashboard: Dashboard = {
     { description: 'Kampanya bonusu', createdAtUtc: new Date().toISOString(), amount: 150 },
     { description: 'Kupon kullanımı', createdAtUtc: new Date().toISOString(), amount: -50 },
   ],
+  updatedAtUtc: new Date(0).toISOString(),
 }
+function cachedDashboard() { try { const value = localStorage.getItem('usta-dashboard-cache'); return value ? JSON.parse(value) as Dashboard : fallbackDashboard } catch { return fallbackDashboard } }
 
 const numberFormatter = new Intl.NumberFormat('tr-TR')
 const dateFormatter = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -77,6 +80,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
   const [cameraState, setCameraState] = useState<'starting' | 'active' | 'unavailable'>('starting')
+  const [pendingCount, setPendingCount] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const scanningRef = useRef(false)
@@ -108,6 +112,21 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
     return () => { cancelled = true; streamRef.current?.getTracks().forEach((track) => track.stop()) }
   }, [])
 
+  useEffect(() => {
+    let active = true
+    const retryPending = async () => {
+      const pending = await getPendingRedemptions(craftsmanId)
+      if (active) setPendingCount(pending.length)
+      if (!navigator.onLine) return
+      for (const item of pending) {
+        try { await redeemProductCode(item.craftsmanId, item.code, item.requestId); await removePendingRedemption(item.requestId); if (active) setPendingCount((count) => Math.max(0, count - 1)); await onRedeemed(); if (active) setResult({ kind: 'success', message: 'Bekleyen ürün kodu sunucuda güvenle işlendi.' }) }
+        catch (error) { if (error instanceof TypeError) return; await removePendingRedemption(item.requestId); if (active) { setPendingCount((count) => Math.max(0, count - 1)); setResult({ kind: 'error', message: error instanceof Error ? error.message : 'Bekleyen kod işlenemedi.' }) } }
+      }
+    }
+    void retryPending(); window.addEventListener('online', retryPending)
+    return () => { active = false; window.removeEventListener('online', retryPending) }
+  }, [craftsmanId, onRedeemed])
+
   async function submitCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!craftsmanId) {
@@ -115,15 +134,21 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
       return
     }
 
+    const normalizedCode = code.trim().toUpperCase(), requestId = crypto.randomUUID()
     setSubmitting(true)
     setResult(null)
+    if (!navigator.onLine) {
+      const count = await enqueueRedemption({ requestId, craftsmanId, code: normalizedCode, createdAtUtc: new Date().toISOString() })
+      setPendingCount(count); setResult({ kind: 'success', message: 'İşlem şifreli kuyruğa alındı. Bağlantı gelince otomatik gönderilecek.' }); setSubmitting(false); setCode(''); return
+    }
     try {
-      const response = await redeemProductCode(craftsmanId, code)
+      const response = await redeemProductCode(craftsmanId, normalizedCode, requestId)
       await onRedeemed()
       setResult({ kind: 'success', message: `${response.product}: +${numberFormatter.format(response.earnedPoints)} puan eklendi.` })
       setCode('')
     } catch (error) {
-      setResult({ kind: 'error', message: error instanceof Error ? error.message : 'Kod kullanılamadı.' })
+      if (error instanceof TypeError) { const count = await enqueueRedemption({ requestId, craftsmanId, code: normalizedCode, createdAtUtc: new Date().toISOString() }); setPendingCount(count); setResult({ kind: 'success', message: 'Sunucuya ulaşılamadı; işlem şifreli kuyruğa alındı.' }); setCode('') }
+      else setResult({ kind: 'error', message: error instanceof Error ? error.message : 'Kod kullanılamadı.' })
     } finally {
       setSubmitting(false)
     }
@@ -148,7 +173,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
         {result && <p className={result.kind}>{result.message}</p>}
       </form>}
       <section className="how-card"><h2>Nasıl Çalışır?</h2><div className="steps"><div><span>▦</span><small>Kodu Okut</small></div><b>→</b><div><span>♢</span><small>Ürün doğrulansın</small></div><b>→</b><div><span>★</span><small>Puanın hemen eklensin</small></div></div><p>♢ Her ürün kodu yalnızca bir kez kullanılabilir.</p></section>
-      <div className="connection-warning">⌁ <strong>Bağlantı zayıf — işlem güvenle tekrar denenecek</strong></div>
+      {(pendingCount > 0 || !navigator.onLine) && <div className="connection-warning">⌁ <strong>{pendingCount > 0 ? `${pendingCount} işlem bekliyor — bağlantı gelince güvenle tekrar denenecek` : 'Bağlantı yok — yeni işlem şifreli kuyruğa alınacak'}</strong></div>}
     </>
   )
 }
@@ -467,7 +492,7 @@ function CraftsmanApp() {
   const [craftsmanId, setCraftsmanId] = useState(() => localStorage.getItem('usta-craftsman-id') ?? '')
   const [needsProfile, setNeedsProfile] = useState(() => localStorage.getItem('usta-needs-profile') === 'true')
   const [screen, setScreen] = useState<Screen>('home')
-  const [dashboard, setDashboard] = useState(fallbackDashboard)
+  const [dashboard, setDashboard] = useState(cachedDashboard)
   const [connected, setConnected] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
 
@@ -475,7 +500,7 @@ function CraftsmanApp() {
     if (!craftsmanId) return
     const controller = new AbortController()
     getCraftsmanDashboard(craftsmanId, controller.signal)
-      .then((data) => { setDashboard(data); setConnected(true) })
+      .then((data) => { setDashboard(data); localStorage.setItem('usta-dashboard-cache', JSON.stringify(data)); setConnected(true) })
       .catch(() => setConnected(false))
     return () => controller.abort()
   }, [craftsmanId])
@@ -489,19 +514,20 @@ function CraftsmanApp() {
   async function refreshDashboard() {
     const data = await getCraftsmanDashboard(craftsmanId)
     setDashboard(data)
+    localStorage.setItem('usta-dashboard-cache', JSON.stringify(data))
     setConnected(true)
   }
 
   function authenticated(id: string, profileRequired: boolean) { localStorage.setItem('usta-craftsman-id', id); localStorage.setItem('usta-needs-profile', String(profileRequired)); setCraftsmanId(id); setNeedsProfile(profileRequired) }
   function profileCompleted() { localStorage.removeItem('usta-needs-profile'); setNeedsProfile(false); void refreshDashboard() }
-  function logout() { localStorage.removeItem('usta-craftsman-id'); localStorage.removeItem('usta-needs-profile'); setCraftsmanId(''); setNeedsProfile(false); setDashboard(fallbackDashboard); setScreen('home') }
+  function logout() { localStorage.removeItem('usta-craftsman-id'); localStorage.removeItem('usta-needs-profile'); localStorage.removeItem('usta-dashboard-cache'); clearPendingRedemptions(); setCraftsmanId(''); setNeedsProfile(false); setDashboard(fallbackDashboard); setScreen('home') }
 
   if (!craftsmanId) return <Login onAuthenticated={authenticated} />
   if (needsProfile) return <ProfileSetup craftsmanId={craftsmanId} onCompleted={profileCompleted} />
 
   return <main className="app-shell">
     <div className="status-bar"><strong>9:41</strong><span>▮▮ ◔ ▰</span></div>
-    {!online && <div className="offline-banner">⌁ Çevrimdışısın — kayıtlı ekranlar açılabilir, puan işlemleri bağlantı gelince yapılır.</div>}
+    {!online && <div className="offline-banner">⌁ Çevrimdışısın — kayıtlı bakiye gösteriliyor. Son güncelleme: {dashboard.updatedAtUtc === fallbackDashboard.updatedAtUtc ? 'bilinmiyor' : dateFormatter.format(new Date(dashboard.updatedAtUtc))}</div>}
     {screen === 'home' && <Home go={setScreen} dashboard={dashboard} connected={connected} />}
     {screen === 'scan' && <Scanner back={() => setScreen('home')} craftsmanId={dashboard.craftsmanId} onRedeemed={refreshDashboard} />}
     {screen === 'rewards' && <Rewards balance={dashboard.balance} craftsmanId={dashboard.craftsmanId} onBalanceChanged={refreshDashboard} />}

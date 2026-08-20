@@ -38,7 +38,8 @@ public sealed class DemoController(
             balance,
             balance / 20,
             Math.Max(0, 12_500 - balance),
-            movements));
+            movements,
+            DateTimeOffset.UtcNow));
     }
 }
 
@@ -49,6 +50,7 @@ public sealed record DashboardResponse(
     int Balance,
     int RewardValueTry,
     int PointsToNextLevel,
-    IReadOnlyList<DashboardMovement> Movements);
+    IReadOnlyList<DashboardMovement> Movements,
+    DateTimeOffset UpdatedAtUtc);
 
 public sealed record DashboardMovement(string Description, DateTimeOffset CreatedAtUtc, int Amount);
