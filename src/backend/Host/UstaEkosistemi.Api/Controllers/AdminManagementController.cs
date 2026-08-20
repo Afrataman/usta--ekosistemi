@@ -47,8 +47,31 @@ public sealed class AdminManagementController(UstaEkosistemiDbContext dbContext)
     {
         var item = await dbContext.Dealers.SingleOrDefaultAsync(x => x.Id == id, token);
         if (item is null) return NotFound(new { message = "Bayi bulunamadı." });
-        item.IsActive = request.IsActive; await dbContext.SaveChangesAsync(token);
+        item.IsActive = request.IsActive;
+        if (!request.IsActive)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var sessions = await dbContext.DealerSessions.Where(x => x.DealerEmployee.DealerId == id && x.RevokedAtUtc == null && x.ExpiresAtUtc > now).ToListAsync(token);
+            foreach (var session in sessions) session.RevokedAtUtc = now;
+        }
+        await dbContext.SaveChangesAsync(token);
         return Ok(new { item.Id, item.IsActive });
+    }
+
+    [HttpPost("dealers/onboard")]
+    public async Task<IActionResult> OnboardDealer(OnboardDealerRequest request, CancellationToken token)
+    {
+        var code = request.Code.Trim().ToUpperInvariant(); var name = request.Name.Trim();
+        if (code.Length is < 3 or > 30 || code.Any(character => !char.IsLetterOrDigit(character) && character != '-')) return ValidationProblem("Bayi kodu 3-30 karakter olmalı; yalnızca harf, rakam ve tire içermelidir.");
+        if (name.Length is < 3 or > 160) return ValidationProblem("Bayi adı 3 ile 160 karakter arasında olmalıdır.");
+        var employeeValidation = ValidateEmployee(new DealerEmployeeRequest(request.EmployeeFullName, request.EmployeePin)); if (employeeValidation is not null) return ValidationProblem(employeeValidation);
+        if (await dbContext.Dealers.AnyAsync(x => x.Code == code, token)) return Conflict(new { message = "Bu bayi kodu daha önce kullanılmış." });
+        var securedPin = OtpCodeHasher.Hash(request.EmployeePin);
+        var dealer = new Dealer { Code = code, Name = name };
+        var employee = new DealerEmployee { DealerId = dealer.Id, FullName = request.EmployeeFullName.Trim(), PinHash = securedPin.Hash, PinSalt = securedPin.Salt };
+        dbContext.Dealers.Add(dealer); dbContext.DealerEmployees.Add(employee);
+        await dbContext.SaveChangesAsync(token);
+        return Created($"/api/admin/dealers/{dealer.Id}", new { dealer.Id, dealer.Code, dealer.Name, employeeId = employee.Id, employee = employee.FullName, warning = "Erişim kodunu yalnızca ilgili çalışana güvenli biçimde iletin." });
     }
 
     [HttpGet("dealers/{dealerId:guid}/employees")]
@@ -112,3 +135,4 @@ public sealed class AdminManagementController(UstaEkosistemiDbContext dbContext)
 public sealed record SetActiveRequest(bool IsActive);
 public sealed record DealerEmployeeRequest(string FullName, string Pin);
 public sealed record ResetEmployeePinRequest(string Pin);
+public sealed record OnboardDealerRequest(string Code, string Name, string EmployeeFullName, string EmployeePin);
