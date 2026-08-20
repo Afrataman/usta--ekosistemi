@@ -150,6 +150,8 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.Property(x => x.Summary).HasMaxLength(500).IsRequired();
             entity.Property(x => x.PointMultiplier).HasPrecision(5, 2);
             entity.HasIndex(x => new { x.IsActive, x.StartsAtUtc, x.EndsAtUtc });
+            entity.HasIndex(x => x.ProductId);
+            entity.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<SupportRequest>(entity =>

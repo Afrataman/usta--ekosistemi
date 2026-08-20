@@ -15,7 +15,7 @@ public sealed class CampaignsController(UstaEkosistemiDbContext dbContext) : Con
         return Ok(await dbContext.Campaigns.AsNoTracking()
             .Where(x => x.IsActive && x.StartsAtUtc <= now && x.EndsAtUtc > now)
             .OrderBy(x => x.DisplayOrder)
-            .Select(x => new { x.Id, x.Title, x.Summary, x.PointMultiplier, x.StartsAtUtc, x.EndsAtUtc })
+            .Select(x => new { x.Id, x.Title, x.Summary, x.PointMultiplier, x.StartsAtUtc, x.EndsAtUtc, x.ProductId, productName = x.Product == null ? null : x.Product.Name })
             .ToListAsync(cancellationToken));
     }
 }

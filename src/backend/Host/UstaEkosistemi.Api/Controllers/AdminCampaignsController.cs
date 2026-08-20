@@ -10,7 +10,7 @@ namespace UstaEkosistemi.Api.Controllers;
 public sealed class AdminCampaignsController(UstaEkosistemiDbContext dbContext) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken token) => Ok(await dbContext.Campaigns.AsNoTracking().OrderByDescending(x => x.StartsAtUtc).Select(x => new { x.Id, x.Title, x.Summary, x.PointMultiplier, x.StartsAtUtc, x.EndsAtUtc, x.IsActive, x.DisplayOrder }).ToListAsync(token));
+    public async Task<IActionResult> GetAll(CancellationToken token) => Ok(await dbContext.Campaigns.AsNoTracking().OrderByDescending(x => x.StartsAtUtc).Select(x => new { x.Id, x.Title, x.Summary, x.PointMultiplier, x.StartsAtUtc, x.EndsAtUtc, x.IsActive, x.DisplayOrder, x.ProductId, productName = x.Product == null ? null : x.Product.Name }).ToListAsync(token));
 
     [HttpPost]
     public async Task<IActionResult> Create(CreateCampaignRequest request, CancellationToken token)
@@ -19,7 +19,8 @@ public sealed class AdminCampaignsController(UstaEkosistemiDbContext dbContext) 
         if (title.Length is < 3 or > 140 || summary.Length is < 10 or > 500) return ValidationProblem("Kampanya başlığı veya açıklaması uygun uzunlukta değil.");
         if (request.PointMultiplier is < 1 or > 10) return ValidationProblem("Puan çarpanı 1 ile 10 arasında olmalıdır.");
         if (request.EndsAtUtc <= request.StartsAtUtc) return ValidationProblem("Bitiş tarihi başlangıç tarihinden sonra olmalıdır.");
-        var campaign = new Campaign { Title = title, Summary = summary, PointMultiplier = request.PointMultiplier, StartsAtUtc = request.StartsAtUtc, EndsAtUtc = request.EndsAtUtc, IsActive = request.IsActive, DisplayOrder = request.DisplayOrder };
+        if (request.ProductId.HasValue && !await dbContext.Products.AnyAsync(x => x.Id == request.ProductId && x.IsActive, token)) return ValidationProblem("Seçilen aktif ürün bulunamadı.");
+        var campaign = new Campaign { Title = title, Summary = summary, PointMultiplier = request.PointMultiplier, StartsAtUtc = request.StartsAtUtc, EndsAtUtc = request.EndsAtUtc, IsActive = request.IsActive, DisplayOrder = request.DisplayOrder, ProductId = request.ProductId };
         dbContext.Campaigns.Add(campaign);
         if (campaign.IsActive) await AddCampaignNotifications(campaign, token);
         await dbContext.SaveChangesAsync(token);
@@ -45,4 +46,4 @@ public sealed class AdminCampaignsController(UstaEkosistemiDbContext dbContext) 
     }
 }
 
-public sealed record CreateCampaignRequest(string Title, string Summary, decimal PointMultiplier, DateTimeOffset StartsAtUtc, DateTimeOffset EndsAtUtc, bool IsActive, int DisplayOrder);
+public sealed record CreateCampaignRequest(string Title, string Summary, decimal PointMultiplier, DateTimeOffset StartsAtUtc, DateTimeOffset EndsAtUtc, bool IsActive, int DisplayOrder, Guid? ProductId);

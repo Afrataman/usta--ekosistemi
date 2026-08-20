@@ -10,4 +10,6 @@ public sealed class Campaign
     public DateTimeOffset EndsAtUtc { get; set; }
     public bool IsActive { get; set; } = true;
     public int DisplayOrder { get; set; }
+    public Guid? ProductId { get; set; }
+    public Product? Product { get; set; }
 }

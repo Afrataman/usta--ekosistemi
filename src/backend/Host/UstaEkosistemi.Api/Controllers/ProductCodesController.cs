@@ -59,7 +59,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
         productCode.RedemptionRequestId = request.RequestId;
 
         var now = DateTimeOffset.UtcNow;
-        var multiplier = await dbContext.Campaigns.Where(x => x.IsActive && x.StartsAtUtc <= now && x.EndsAtUtc >= now).MaxAsync(x => (decimal?)x.PointMultiplier, cancellationToken) ?? 1;
+        var multiplier = await dbContext.Campaigns.Where(x => x.IsActive && x.StartsAtUtc <= now && x.EndsAtUtc >= now && (x.ProductId == null || x.ProductId == productCode.ProductId)).MaxAsync(x => (decimal?)x.PointMultiplier, cancellationToken) ?? 1;
         var earnedPoints = decimal.ToInt32(decimal.Floor(productCode.Product.BasePoints * Math.Max(1, multiplier)));
         var ledgerEntry = new PointLedgerEntry
         {

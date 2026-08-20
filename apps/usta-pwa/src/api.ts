@@ -153,7 +153,7 @@ export async function updateCraftsmanProfile(craftsmanId: string, profile: Updat
   }
 }
 
-export type Campaign = { id: string; title: string; summary: string; pointMultiplier: number; startsAtUtc: string; endsAtUtc: string }
+export type Campaign = { id: string; title: string; summary: string; pointMultiplier: number; startsAtUtc: string; endsAtUtc: string; productId: string | null; productName: string | null }
 export type CraftsmanNotification = { id: string; type: string; title: string; message: string; referenceType: string | null; referenceId: string | null; createdAtUtc: string; readAtUtc: string | null }
 export type NotificationInbox = { unreadCount: number; items: CraftsmanNotification[] }
 export type SupportItem = { id: string; category: string; subject: string; description: string; status: string; createdAtUtc: string; resolvedAtUtc: string | null }
@@ -291,7 +291,7 @@ export async function getAdminDealers(): Promise<AdminDealer[]> { const response
 export async function setAdminEntityActive(kind: 'craftsmen' | 'dealers', id: string, isActive: boolean): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/${kind}/${id}/active`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive }) }); if (!response.ok) throw new Error('Durum güncellenemedi.') }
 export type AdminCampaign = Campaign & { isActive: boolean; displayOrder: number }
 export async function getAdminCampaigns(): Promise<AdminCampaign[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/campaigns`); if (!response.ok) throw new Error('Kampanyalar alınamadı.'); return response.json() as Promise<AdminCampaign[]> }
-export async function createAdminCampaign(request: Omit<AdminCampaign, 'id'>): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/campaigns`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }); if (!response.ok) { const body = await response.json().catch(() => null) as { detail?: string } | null; throw new Error(body?.detail ?? 'Kampanya oluşturulamadı.') } }
+export async function createAdminCampaign(request: Omit<AdminCampaign, 'id' | 'productName'>): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/campaigns`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }); if (!response.ok) { const body = await response.json().catch(() => null) as { detail?: string } | null; throw new Error(body?.detail ?? 'Kampanya oluşturulamadı.') } }
 export async function setAdminCampaignActive(id: string, isActive: boolean): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/campaigns/${id}/active`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive }) }); if (!response.ok) throw new Error('Kampanya durumu güncellenemedi.') }
 export type AdminReward = Reward & { isActive: boolean; displayOrder: number; createdAtUtc: string }
 export async function getAdminRewards(): Promise<AdminReward[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/rewards`); if (!response.ok) throw new Error('Ödüller alınamadı.'); return response.json() as Promise<AdminReward[]> }
