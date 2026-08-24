@@ -22,6 +22,12 @@ npm install
 npm run dev
 ```
 
+İsterseniz iki servisi tek komutla başlatabilirsiniz:
+
+```powershell
+.\scripts\start-local.ps1
+```
+
 Terminalde gösterilen `http://localhost:5173` adresini tarayıcıda açın. Telefon görünümünü görmek için tarayıcı penceresini daraltabilir veya `F12` ile cihaz araç çubuğunu açabilirsiniz.
 
 PWA, geliştirmede varsayılan olarak `http://localhost:5028` API adresini kullanır. Ayrı bir test sunucusuna bağlanmanız gerekirse `apps/usta-pwa/.env.example` dosyasını `.env.local` adıyla kopyalayıp yalnızca `VITE_API_URL` değerini değiştirin. Canlıda PWA ve API aynı alan adındaysa ek ayar gerekmez. Bu dosyaya parola, SQL bağlantı dizesi veya SMS sağlayıcı anahtarı yazılmaz.
