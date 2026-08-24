@@ -56,6 +56,30 @@ public sealed class IdempotentTransactionTests
         Assert.Equal(1, await db.PointLedgerEntries.CountAsync(x => x.TransactionType == PointTransactionType.RewardRedeemed));
     }
 
+    [Fact]
+    public async Task Returning_the_same_product_twice_reverses_points_once()
+    {
+        await using var db = new UstaEkosistemiDbContext(options);
+        var craftsman = await SeedCraftsmanAsync(db, 0);
+        var product = new Product { Sku = "TEST-RETURN", Name = "İade Test Ürünü", BasePoints = 250 };
+        var code = new ProductCode { Product = product, CodeHash = ProductCodeHasher.Hash("TEST-RETURN-001"), Status = ProductCodeStatus.Redeemed, RedeemedByCraftsman = craftsman, RedeemedAtUtc = DateTimeOffset.UtcNow };
+        db.AddRange(product, code);
+        db.PointLedgerEntries.Add(new PointLedgerEntry { Craftsman = craftsman, Amount = 250, TransactionType = PointTransactionType.ProductCodeEarned, ReferenceType = nameof(ProductCode), ReferenceId = code.Id, Description = "İade test puanı" });
+        var dealer = new Dealer { Code = "TEST-DEALER", Name = "Test Bayi" };
+        var employee = new DealerEmployee { Dealer = dealer, FullName = "Test Çalışanı" };
+        db.DealerSessions.Add(new DealerSession { DealerEmployee = employee, TokenHash = DealerSessionAuthenticator.HashToken("dealer-token"), ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1) });
+        await db.SaveChangesAsync();
+        var controller = new ProductCodesController(db, new DealerSessionAuthenticator(db));
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        controller.Request.Headers.Authorization = "Bearer dealer-token";
+
+        Assert.IsType<OkObjectResult>(await controller.Return(new ReturnProductCodeRequest("TEST-RETURN-001", "Test iadesi"), CancellationToken.None));
+        Assert.IsType<OkObjectResult>(await controller.Return(new ReturnProductCodeRequest("TEST-RETURN-001", "Test iadesi"), CancellationToken.None));
+
+        Assert.Equal(1, await db.PointLedgerEntries.CountAsync(x => x.TransactionType == PointTransactionType.ReturnReversal));
+        Assert.Equal(ProductCodeStatus.Returned, (await db.ProductCodes.SingleAsync()).Status);
+    }
+
     private static async Task<Craftsman> SeedCraftsmanAsync(UstaEkosistemiDbContext db, int openingPoints)
     {
         var craftsman = new Craftsman { PhoneNumber = $"90555{Guid.NewGuid():N}"[..13], FullName = "Test Ustası" };
