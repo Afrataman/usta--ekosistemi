@@ -8,6 +8,7 @@ public sealed class OutboxMessage
     public required string Type { get; set; }
     public required string Payload { get; set; }
     public required string DeduplicationKey { get; set; }
+    public string? CorrelationId { get; set; }
     public OutboxMessageStatus Status { get; set; } = OutboxMessageStatus.Pending;
     public int AttemptCount { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

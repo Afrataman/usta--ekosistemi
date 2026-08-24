@@ -208,7 +208,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         });
         modelBuilder.Entity<AdminAuditEntry>(entity =>
         {
-            entity.ToTable("AdminAuditEntries"); entity.HasKey(x => x.Id); entity.Property(x => x.Actor).HasMaxLength(120).IsRequired(); entity.Property(x => x.Action).HasMaxLength(60).IsRequired(); entity.Property(x => x.EntityType).HasMaxLength(60).IsRequired(); entity.Property(x => x.Details).HasMaxLength(1000).IsRequired(); entity.HasIndex(x => x.CreatedAtUtc); entity.HasIndex(x => new { x.EntityType, x.EntityId }); entity.HasOne(x => x.AdminUser).WithMany().HasForeignKey(x => x.AdminUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable("AdminAuditEntries"); entity.HasKey(x => x.Id); entity.Property(x => x.Actor).HasMaxLength(120).IsRequired(); entity.Property(x => x.Action).HasMaxLength(60).IsRequired(); entity.Property(x => x.EntityType).HasMaxLength(60).IsRequired(); entity.Property(x => x.Details).HasMaxLength(1000).IsRequired(); entity.Property(x => x.CorrelationId).HasMaxLength(64); entity.HasIndex(x => x.CreatedAtUtc); entity.HasIndex(x => new { x.EntityType, x.EntityId }); entity.HasIndex(x => x.CorrelationId); entity.HasOne(x => x.AdminUser).WithMany().HasForeignKey(x => x.AdminUserId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<MembershipPass>(entity =>
         {
@@ -228,7 +228,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         });
         modelBuilder.Entity<OutboxMessage>(entity =>
         {
-            entity.ToTable("OutboxMessages"); entity.HasKey(x => x.Id); entity.Property(x => x.Type).HasMaxLength(80).IsRequired(); entity.Property(x => x.Payload).IsRequired(); entity.Property(x => x.DeduplicationKey).HasMaxLength(240).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20); entity.Property(x => x.LastError).HasMaxLength(1000); entity.HasIndex(x => x.DeduplicationKey).IsUnique(); entity.HasIndex(x => new { x.Status, x.NextAttemptAtUtc });
+            entity.ToTable("OutboxMessages"); entity.HasKey(x => x.Id); entity.Property(x => x.Type).HasMaxLength(80).IsRequired(); entity.Property(x => x.Payload).IsRequired(); entity.Property(x => x.DeduplicationKey).HasMaxLength(240).IsRequired(); entity.Property(x => x.CorrelationId).HasMaxLength(64); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20); entity.Property(x => x.LastError).HasMaxLength(1000); entity.HasIndex(x => x.DeduplicationKey).IsUnique(); entity.HasIndex(x => new { x.Status, x.NextAttemptAtUtc }); entity.HasIndex(x => x.CorrelationId);
         });
     }
 }

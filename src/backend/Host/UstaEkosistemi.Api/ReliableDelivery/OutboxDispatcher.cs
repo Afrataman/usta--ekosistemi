@@ -32,6 +32,7 @@ public sealed class OutboxDispatcher(IServiceScopeFactory scopeFactory, ILogger<
     private async Task DispatchOne(UstaEkosistemiDbContext dbContext, Guid id, CancellationToken token)
     {
         var item = await dbContext.OutboxMessages.SingleAsync(x => x.Id == id, token);
+        using var scope = logger.BeginScope("CorrelationId:{CorrelationId}", item.CorrelationId ?? item.Id.ToString("N"));
         try
         {
             if (item.Type != OutboxExtensions.CraftsmanNotificationType) throw new InvalidOperationException($"Desteklenmeyen outbox türü: {item.Type}");

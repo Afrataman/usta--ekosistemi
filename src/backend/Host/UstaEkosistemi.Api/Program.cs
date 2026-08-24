@@ -2,10 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Security;
 using UstaEkosistemi.Api.ReliableDelivery;
+using UstaEkosistemi.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+builder.Logging.AddSimpleConsole(options => options.IncludeScopes = true);
 
 // Add services to the container.
 
@@ -34,6 +35,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+app.UseMiddleware<RequestCorrelationMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<AdminAuthenticationMiddleware>();
 app.UseMiddleware<CraftsmanAuthenticationMiddleware>();

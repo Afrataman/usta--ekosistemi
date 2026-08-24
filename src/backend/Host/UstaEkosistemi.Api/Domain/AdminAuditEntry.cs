@@ -9,6 +9,7 @@ public sealed class AdminAuditEntry
     public required string EntityType { get; set; }
     public Guid? EntityId { get; set; }
     public required string Details { get; set; }
+    public string? CorrelationId { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public AdminUser AdminUser { get; set; } = null!;
 }

@@ -1,5 +1,6 @@
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
+using UstaEkosistemi.Api.Observability;
 
 namespace UstaEkosistemi.Api.Security;
 
@@ -15,7 +16,8 @@ public static class AdminAuditExtensions
             Action = action,
             EntityType = entityType,
             EntityId = entityId,
-            Details = details.Length <= 1000 ? details : details[..1000]
+            Details = details.Length <= 1000 ? details : details[..1000],
+            CorrelationId = context.Items[RequestCorrelationMiddleware.ItemName]?.ToString()
         });
     }
 }

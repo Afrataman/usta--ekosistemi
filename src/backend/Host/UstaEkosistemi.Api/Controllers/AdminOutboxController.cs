@@ -14,7 +14,7 @@ public sealed class AdminOutboxController(UstaEkosistemiDbContext dbContext) : C
     public async Task<IActionResult> Get(CancellationToken token)
     {
         var rows = await dbContext.OutboxMessages.AsNoTracking().OrderByDescending(x => x.CreatedAtUtc).Take(200)
-            .Select(x => new { x.Id, x.Type, status = x.Status.ToString(), x.AttemptCount, x.CreatedAtUtc, x.NextAttemptAtUtc, x.DeliveredAtUtc, x.LastError }).ToListAsync(token);
+            .Select(x => new { x.Id, x.Type, status = x.Status.ToString(), x.AttemptCount, x.CorrelationId, x.CreatedAtUtc, x.NextAttemptAtUtc, x.DeliveredAtUtc, x.LastError }).ToListAsync(token);
         var summary = new
         {
             pending = await dbContext.OutboxMessages.CountAsync(x => x.Status == OutboxMessageStatus.Pending, token),

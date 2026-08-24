@@ -1,6 +1,8 @@
 using System.Text.Json;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
+using System.Diagnostics;
+using UstaEkosistemi.Api.Observability;
 
 namespace UstaEkosistemi.Api.ReliableDelivery;
 
@@ -17,7 +19,8 @@ public static class OutboxExtensions
         {
             Type = CraftsmanNotificationType,
             Payload = JsonSerializer.Serialize(new CraftsmanNotificationPayload(craftsmanId, type, title, message, referenceType, referenceId)),
-            DeduplicationKey = deduplicationKey
+            DeduplicationKey = deduplicationKey,
+            CorrelationId = CorrelationContext.Current ?? Activity.Current?.TraceId.ToString()
         });
     }
 }
