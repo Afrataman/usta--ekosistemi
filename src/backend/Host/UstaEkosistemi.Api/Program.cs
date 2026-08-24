@@ -55,11 +55,20 @@ app.UseMiddleware<AdminAuthenticationMiddleware>();
 app.UseMiddleware<CraftsmanAuthenticationMiddleware>();
 
 app.MapControllers();
-app.MapGet("/api/health", async (UstaEkosistemiDbContext dbContext, CancellationToken cancellationToken) => Results.Ok(new
+app.MapGet("/api/health", async (UstaEkosistemiDbContext dbContext, CancellationToken cancellationToken) =>
 {
-    status = "healthy",
-    service = "usta-ekosistemi-api",
-    database = await dbContext.Database.CanConnectAsync(cancellationToken) ? "connected" : "unavailable"
-}));
+    try
+    {
+        if (!await dbContext.Database.CanConnectAsync(cancellationToken))
+        {
+            return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Veritabanı bağlantısı kullanılamıyor.");
+        }
+        return Results.Ok(new { status = "healthy", service = "usta-ekosistemi-api", database = "connected" });
+    }
+    catch (Exception)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Veritabanı bağlantısı kullanılamıyor.");
+    }
+});
 
 app.Run();
