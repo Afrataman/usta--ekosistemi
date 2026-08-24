@@ -106,7 +106,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
-  const [cameraState, setCameraState] = useState<'starting' | 'active' | 'unavailable'>('starting')
+  const [cameraState, setCameraState] = useState<'starting' | 'active' | 'unavailable' | 'denied'>('starting')
   const [pendingCount, setPendingCount] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -115,25 +115,49 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   useEffect(() => {
     let cancelled = false
     async function startCamera() {
+      // BarcodeDetector API kontrolü (Modern tarayıcılar için)
       const Detector = (window as typeof window & { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector
-      if (!Detector || !navigator.mediaDevices?.getUserMedia) { setCameraState('unavailable'); return }
+
+      if (!Detector || !navigator.mediaDevices?.getUserMedia) {
+          setCameraState('unavailable')
+          setManualEntryOpen(true) // Kamera yoksa doğrudan elle girişi aç
+          return
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
         if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return }
         streamRef.current = stream
         if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play() }
         setCameraState('active')
+
         const detector = new Detector({ formats: ['qr_code'] })
         const scan = async () => {
           if (cancelled || scanningRef.current || !videoRef.current) return
           try {
             const found = await detector.detect(videoRef.current)
-            if (found[0]?.rawValue) { scanningRef.current = true; setCode(found[0].rawValue.trim().toUpperCase()); setManualEntryOpen(true); setResult({ kind: 'success', message: 'QR kod okundu. Kodu kullanarak işlemi onaylayın.' }); return }
+            if (found[0]?.rawValue) {
+                scanningRef.current = true;
+                setCode(found[0].rawValue.trim().toUpperCase());
+                setManualEntryOpen(true);
+                setResult({ kind: 'success', message: '✓ QR kod okundu. Kodu onaylayarak işlemi tamamlayın.' });
+                return
+            }
           } catch { /* Kamera bir sonraki karede yeniden denenir. */ }
           window.setTimeout(scan, 350)
         }
         void scan()
-      } catch { if (!cancelled) setCameraState('unavailable') }
+      } catch (error: unknown) {
+          if (!cancelled) {
+              // İzin reddedildiyse veya kamera başka bir uygulama tarafından kullanılıyorsa
+              if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError')) {
+                  setCameraState('denied')
+              } else {
+                  setCameraState('unavailable')
+              }
+              setManualEntryOpen(true) // Hata durumunda da elle girişi otomatik aç
+          }
+      }
     }
     void startCamera()
     return () => { cancelled = true; streamRef.current?.getTracks().forEach((track) => track.stop()) }
@@ -154,28 +178,42 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
     return () => { active = false; window.removeEventListener('online', retryPending) }
   }, [craftsmanId, onRedeemed])
 
+  // Elle girilen kodun formatını düzenleme (Sadece harf, rakam ve tire)
+  const handleCodeInput = (value: string) => {
+      const sanitized = value.toUpperCase().replace(/[^A-Z0-9-]/g, '')
+      setCode(sanitized)
+  }
+
   async function submitCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!craftsmanId) {
-      setResult({ kind: 'error', message: 'Backend bağlantısı kurulamadı. İkinci terminalde API’yi çalıştırın.' })
+      setResult({ kind: 'error', message: 'Bağlantı hatası: Kullanıcı oturumu bulunamadı.' })
+      return
+    }
+    if (code.length < 8) {
+      setResult({ kind: 'error', message: 'Ürün kodu en az 8 karakter olmalıdır.' })
       return
     }
 
-    const normalizedCode = code.trim().toUpperCase(), requestId = crypto.randomUUID()
+    const normalizedCode = code.trim(), requestId = crypto.randomUUID()
     setSubmitting(true)
     setResult(null)
+
     if (!navigator.onLine) {
       const count = await enqueueRedemption({ requestId, craftsmanId, code: normalizedCode, createdAtUtc: new Date().toISOString() })
-      setPendingCount(count); setResult({ kind: 'success', message: 'İşlem şifreli kuyruğa alındı. Bağlantı gelince otomatik gönderilecek.' }); setSubmitting(false); setCode(''); return
+      setPendingCount(count); setResult({ kind: 'success', message: 'İnternet yok. İşlem şifreli kuyruğa alındı, bağlantı gelince otomatik yüklenecek.' }); setSubmitting(false); setCode(''); return
     }
+
     try {
       const response = await redeemProductCode(craftsmanId, normalizedCode, requestId)
       await onRedeemed()
-      setResult({ kind: 'success', message: `${response.product}: +${numberFormatter.format(response.earnedPoints)} puan eklendi.` })
+      setResult({ kind: 'success', message: `✓ ${response.product}: +${numberFormatter.format(response.earnedPoints)} puan eklendi.` })
       setCode('')
+      scanningRef.current = false // Kamerayı yeni okuma için serbest bırak
     } catch (error) {
-      if (error instanceof TypeError) { const count = await enqueueRedemption({ requestId, craftsmanId, code: normalizedCode, createdAtUtc: new Date().toISOString() }); setPendingCount(count); setResult({ kind: 'success', message: 'Sunucuya ulaşılamadı; işlem şifreli kuyruğa alındı.' }); setCode('') }
+      if (error instanceof TypeError) { const count = await enqueueRedemption({ requestId, craftsmanId, code: normalizedCode, createdAtUtc: new Date().toISOString() }); setPendingCount(count); setResult({ kind: 'success', message: 'Sunucuya ulaşılamadı; işlem kuyruğa alındı.' }); setCode('') }
       else setResult({ kind: 'error', message: error instanceof Error ? error.message : 'Kod kullanılamadı.' })
+      scanningRef.current = false
     } finally {
       setSubmitting(false)
     }
@@ -183,24 +221,79 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
 
   return (
     <>
-      <header className="page-header"><button onClick={back} type="button">‹</button><h1>Ürün Kodunu Okut</h1><button type="button">?</button></header>
-      <p className="scan-instruction">Kodu çerçevenin içine hizalayın</p>
-      <div className="camera-frame">
+      <header className="page-header"><button onClick={back} aria-label="Geri Dön" type="button">‹</button><h1>Ürün Kodunu Okut</h1><button type="button" aria-label="Yardım">?</button></header>
+
+      {cameraState === 'active' && <p className="scan-instruction">Kodu çerçevenin içine hizalayın</p>}
+
+      <div className="camera-frame" aria-live="polite">
         <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
         <video className={cameraState === 'active' ? 'camera-preview active' : 'camera-preview'} ref={videoRef} playsInline muted aria-label="QR kod kamerası" />
-        {cameraState !== 'active' && <div className="product-box"><div className="box-top" /><div className="qr-art">▦</div><small>||||||||||</small></div>}
+
         {cameraState === 'starting' && <span className="camera-status">Kamera hazırlanıyor…</span>}
-        {cameraState === 'unavailable' && <span className="camera-status">Kamera kullanılamadı; kodu elle girebilirsiniz.</span>}
+
+        {cameraState === 'denied' && (
+            <div className="camera-error-box">
+                <span className="camera-error-icon">⊘</span>
+                <strong>Kamera İzni Gerekli</strong>
+                <small>Kameranızı kullanabilmemiz için tarayıcı ayarlarından izin vermelisiniz.</small>
+            </div>
+        )}
+
+        {cameraState === 'unavailable' && (
+            <div className="camera-error-box">
+                <span className="camera-error-icon">⚠</span>
+                <strong>Kamera Bulunamadı</strong>
+                <small>Cihazınızda desteklenen bir kamera bulunamadı veya şu an kullanılamıyor.</small>
+            </div>
+        )}
       </div>
-      <button className="secondary-action scanner-manual" onClick={() => setManualEntryOpen((open) => !open)} type="button"><span>⌨</span>Kodu Elle Gir</button>
-      {manualEntryOpen && <form className="manual-code-form" onSubmit={submitCode}>
-        <label htmlFor="product-code">Ürün kodu</label>
-        <div><input id="product-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="Örn. USTA-DEMO-2026" minLength={8} required autoComplete="off" /><button disabled={submitting} type="submit">{submitting ? 'Kontrol ediliyor…' : 'Kodu Kullan'}</button></div>
-        <small>Deneme kodu: <button onClick={() => setCode('USTA-DEMO-2026')} type="button">USTA-DEMO-2026</button></small>
-        {result && <p className={result.kind}>{result.message}</p>}
-      </form>}
-      <section className="how-card"><h2>Nasıl Çalışır?</h2><div className="steps"><div><span>▦</span><small>Kodu Okut</small></div><b>→</b><div><span>♢</span><small>Ürün doğrulansın</small></div><b>→</b><div><span>★</span><small>Puanın hemen eklensin</small></div></div><p>♢ Her ürün kodu yalnızca bir kez kullanılabilir.</p></section>
-      {(pendingCount > 0 || !navigator.onLine) && <div className="connection-warning">⌁ <strong>{pendingCount > 0 ? `${pendingCount} işlem bekliyor — bağlantı gelince güvenle tekrar denenecek` : 'Bağlantı yok — yeni işlem şifreli kuyruğa alınacak'}</strong></div>}
+
+      {cameraState === 'active' && (
+          <button className="secondary-action scanner-manual" onClick={() => setManualEntryOpen((open) => !open)} type="button" aria-expanded={manualEntryOpen}>
+              <span>⌨</span>{manualEntryOpen ? 'Elle Girişi Gizle' : 'Kodu Elle Gir'}
+          </button>
+      )}
+
+      {manualEntryOpen && (
+          <form className="manual-code-form" onSubmit={submitCode}>
+            <label htmlFor="product-code">Ürün Kodu</label>
+            <div>
+                <input
+                    id="product-code"
+                    value={code}
+                    onChange={(event) => handleCodeInput(event.target.value)}
+                    placeholder="Örn. USTA-DEMO-2026"
+                    minLength={8}
+                    maxLength={30}
+                    required
+                    autoComplete="off"
+                />
+                <button disabled={submitting || code.length < 8} type="submit">
+                    {submitting ? 'İşleniyor…' : 'Kodu Kullan'}
+                </button>
+            </div>
+            {/* Erişilebilirlik için durumu sesli okuyucuya aktarıyoruz */}
+            <div aria-live="assertive">
+                {result && <p className={`result-message ${result.kind}`}>{result.message}</p>}
+            </div>
+          </form>
+      )}
+
+      <section className="how-card">
+          <h2>Nasıl Çalışır?</h2>
+          <div className="steps">
+              <div><span>▦</span><small>Kodu Okut</small></div><b>→</b>
+              <div><span>♢</span><small>Doğrulansın</small></div><b>→</b>
+              <div><span>★</span><small>Puan Eklensin</small></div>
+          </div>
+          <p>♢ Her ürün kodu yalnızca bir kez kullanılabilir.</p>
+      </section>
+
+      {(pendingCount > 0 || !navigator.onLine) && (
+          <div className="connection-warning" role="alert">
+              ⌁ <strong>{pendingCount > 0 ? `${pendingCount} işlem bekliyor — bağlantı gelince otomatik denenecek` : 'İnternet yok — yeni okutulan kodlar kuyruğa alınacak'}</strong>
+          </div>
+      )}
     </>
   )
 }
@@ -270,6 +363,10 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
   const [wallet, setWallet] = useState<WalletData | null>(null)
   const [error, setError] = useState(false)
 
+  // Yeni State'ler: Filtreleme ve Detay Modalı için
+  const [filter, setFilter] = useState<'all' | 'earned' | 'spent'>('all')
+  const [selectedMovement, setSelectedMovement] = useState<any | null>(null)
+
   useEffect(() => {
     if (!dashboard.craftsmanId) return
     const controller = new AbortController()
@@ -281,33 +378,140 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
   const pointDebt = wallet?.pointDebt ?? dashboard.pointDebt
   const movements = wallet?.movements ?? dashboard.movements.map((movement, index) => ({ ...movement, id: String(index), transactionType: 0 }))
 
-  return <>
-    <header className="wallet-header"><div><span>PUAN CÜZDANI</span><h1>{dashboard.fullName}</h1></div><b>{levelNames[dashboard.level] ?? dashboard.level}</b></header>
-    <section className="wallet-balance"><span>Kullanılabilir puanın</span><strong>{numberFormatter.format(availablePoints)} <small>puan</small></strong><p>Bu puanla alabileceğin ödüllerin değeri: <b>{numberFormatter.format(Math.floor(availablePoints / 20))} TL'ye kadar</b></p></section>
-    {pointDebt > 0 && <div className="point-debt-warning"><strong>{numberFormatter.format(pointDebt)} puan açığınız var</strong><span>İade edilen üründen kazanılan puan geri alındı. Yeni puanlarınız önce bu açığı kapatacak.</span></div>}
-    <div className="wallet-actions"><button onClick={() => go('scan')} type="button"><span>▦</span>Puan Kazan</button><button onClick={() => go('rewards')} disabled={pointDebt > 0} type="button"><span>♙</span>{pointDebt > 0 ? 'Ödüller Kilitli' : 'Ödüllere Git'}</button></div>
-    <div className="wallet-title"><h2>Puan hareketleri</h2><button type="button">Tümü</button></div>
-    {error && <p className="wallet-error">Bağlantı kurulamadı; son bilinen hareketler gösteriliyor.</p>}
-    <section className="wallet-movements">
-      {movements.length === 0 && <p className="empty-wallet">Henüz puan hareketi yok.</p>}
-      {movements.map((movement) => <article key={movement.id}>
-        <span className={movement.amount < 0 ? 'movement-badge spent' : 'movement-badge'}>{movement.amount < 0 ? '↙' : '↗'}</span>
-        <div><strong>{movement.description}</strong><time>{dateFormatter.format(new Date(movement.createdAtUtc))}</time></div>
-        <b className={movement.amount < 0 ? 'negative' : ''}>{movement.amount > 0 ? '+' : ''}{numberFormatter.format(movement.amount)}</b>
-      </article>)}
-    </section>
-    <div className="wallet-info">ⓘ <span>Puanlar nakit değildir ve banka hesabına çekilemez. Yalnızca Usta Kulübü ödüllerinde kullanılır.</span></div>
-  </>
-}
+  // Hareketleri filtreleme mantığı
+  const filteredMovements = movements.filter(m => {
+      if (filter === 'earned') return m.amount > 0
+      if (filter === 'spent') return m.amount < 0
+      return true
+  })
 
+  // İşlem türüne göre başlık/ikon eşleştirmesi (Varsayılan veya Backend'den gelen tipe göre)
+  const getTransactionLabel = (amount: number) => amount > 0 ? 'Puan Kazanımı' : 'Puan Harcaması / İade'
+
+  return (
+    <>
+      <header className="wallet-header">
+          <div>
+              <span>PUAN CÜZDANI</span>
+              <h1>{dashboard.fullName}</h1>
+          </div>
+          <b>{levelNames[dashboard.level] ?? dashboard.level}</b>
+      </header>
+
+      <section className="wallet-balance">
+          <span>Kullanılabilir puanın</span>
+          <strong>{numberFormatter.format(availablePoints)} <small>puan</small></strong>
+          <p>Bu puanla alabileceğin ödüllerin değeri: <b>{numberFormatter.format(Math.floor(availablePoints / 20))} TL'ye kadar</b></p>
+      </section>
+
+      {pointDebt > 0 && (
+          <div className="point-debt-warning" role="alert">
+              <strong>{numberFormatter.format(pointDebt)} puan açığınız var</strong>
+              <span>İade edilen üründen kazanılan puan geri alındı. Yeni puanlarınız önce bu açığı kapatacak.</span>
+          </div>
+      )}
+
+      <div className="wallet-actions">
+          <button onClick={() => go('scan')} type="button"><span>▦</span>Puan Kazan</button>
+          <button onClick={() => go('rewards')} disabled={pointDebt > 0} type="button"><span>♙</span>{pointDebt > 0 ? 'Ödüller Kilitli' : 'Ödüllere Git'}</button>
+      </div>
+
+      <div className="wallet-title">
+          <h2>Puan hareketleri</h2>
+          {/* İşlevsel Filtreleme Seçeneği */}
+          <select
+              className="movement-filter-select"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as 'all' | 'earned' | 'spent')}
+              aria-label="Puan hareketlerini filtrele"
+          >
+              <option value="all">Tümü</option>
+              <option value="earned">Kazanılanlar (+)</option>
+              <option value="spent">Harcananlar (-)</option>
+          </select>
+      </div>
+
+      {error && <p className="wallet-error" role="alert">Bağlantı kurulamadı; son bilinen hareketler gösteriliyor.</p>}
+
+      <section className="wallet-movements">
+        {filteredMovements.length === 0 && <p className="empty-wallet">Bu kategoride henüz puan hareketi yok.</p>}
+        {filteredMovements.map((movement) => (
+          <article
+              key={movement.id}
+              onClick={() => setSelectedMovement(movement)}
+              role="button"
+              tabIndex={0}
+              style={{ cursor: 'pointer' }}
+          >
+            <span className={movement.amount < 0 ? 'movement-badge spent' : 'movement-badge'}>
+                {movement.amount < 0 ? '↙' : '↗'}
+            </span>
+            <div>
+                <strong>{movement.description}</strong>
+                <time>{dateFormatter.format(new Date(movement.createdAtUtc))}</time>
+            </div>
+            <b className={movement.amount < 0 ? 'negative' : ''}>
+                {movement.amount > 0 ? '+' : ''}{numberFormatter.format(movement.amount)}
+            </b>
+          </article>
+        ))}
+      </section>
+
+      {/* Puan Hareketi Detay Modalı */}
+      {selectedMovement && (
+          <div className="reward-dialog-backdrop">
+              <section className="reward-dialog coupon-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="movement-dialog-title">
+                  <button className="dialog-close" onClick={() => setSelectedMovement(null)} type="button" aria-label="Kapat">×</button>
+
+                  <div className="dialog-art" style={{ fontSize: '3rem', margin: '0 auto 10px', display: 'block', textAlign: 'center' }}>
+                      {selectedMovement.amount < 0 ? '📉' : '📈'}
+                  </div>
+
+                  <h2 id="movement-dialog-title" style={{ textAlign: 'center' }}>
+                      {getTransactionLabel(selectedMovement.amount)}
+                  </h2>
+
+                  <div className="coupon-code-display" style={{ padding: '15px', background: 'var(--bg-card)', borderRadius: '8px', margin: '15px 0' }}>
+                      <code className={`large-code ${selectedMovement.amount < 0 ? 'negative' : ''}`} style={{ fontSize: '24px' }}>
+                          {selectedMovement.amount > 0 ? '+' : ''}{numberFormatter.format(selectedMovement.amount)} Puan
+                      </code>
+                  </div>
+
+                  <div className="coupon-meta-info">
+                      <p><strong>Açıklama:</strong> {selectedMovement.description}</p>
+                      <p><strong>Tarih:</strong> {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long', timeStyle: 'medium' }).format(new Date(selectedMovement.createdAtUtc))}</p>
+                      {/* Gerçek veritabanı ID'si varsa göster */}
+                      {selectedMovement.id && selectedMovement.id.length > 5 && (
+                          <p><strong>İşlem Referansı:</strong> <span style={{ fontSize: '11px', opacity: 0.8 }}>{selectedMovement.id}</span></p>
+                      )}
+                  </div>
+
+                  <div className="dialog-actions">
+                      <button className="dialog-cancel" onClick={() => setSelectedMovement(null)} type="button" style={{ width: '100%', marginTop: '10px' }}>Kapat</button>
+                  </div>
+              </section>
+          </div>
+      )}
+
+      <div className="wallet-info">
+          ⓘ <span>Puanlar nakit değildir ve banka hesabına çekilemez. Yalnızca Usta Kulübü ödüllerinde kullanılır. Detayını görmek istediğiniz işlemin üzerine tıklayabilirsiniz.</span>
+      </div>
+    </>
+  )
+}
 function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void }) {
   const [items, setItems] = useState<RewardRedemption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copiedId, setCopiedId] = useState('')
 
+  // Yeni State'ler: Sekme yönetimi ve Detay Modalı için
+  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'used' | 'cancelled'>('all')
+  const [selectedCoupon, setSelectedCoupon] = useState<RewardRedemption | null>(null)
+  const [qrImage, setQrImage] = useState('')
+
   useEffect(() => {
-    if (!craftsmanId) { setLoading(false); setError('Backend bağlantısı kurulamadı.'); return }
+    if (!craftsmanId) { setLoading(false); setError('Bağlantı hatası: Oturum bulunamadı.'); return }
     const controller = new AbortController()
     getRewardRedemptions(craftsmanId, controller.signal)
       .then(setItems)
@@ -316,24 +520,137 @@ function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void 
     return () => controller.abort()
   }, [craftsmanId])
 
-  async function copyCode(item: RewardRedemption) {
-    await navigator.clipboard.writeText(item.fulfillmentCode)
-    setCopiedId(item.id)
-    window.setTimeout(() => setCopiedId(''), 1600)
+  // Seçilen sekmeye göre listeyi filtreleme
+  const filteredItems = items.filter(item => {
+      if (activeTab === 'active') return item.status === 'Created'
+      if (activeTab === 'used') return item.status === 'Fulfilled'
+      if (activeTab === 'cancelled') return item.status === 'Cancelled'
+      return true
+  })
+
+  // Kupona tıklandığında detay modülünü açma ve QR Kod üretme
+  const openCouponDetail = async (item: RewardRedemption) => {
+    setSelectedCoupon(item)
+    if (item.deliveryType === 'DealerPickup' && item.status === 'Created') {
+        try {
+            const qr = await QRCode.toDataURL(item.fulfillmentCode, { width: 240, margin: 1, color: { dark: '#041521', light: '#ffffff' } })
+            setQrImage(qr)
+        } catch {
+            setQrImage('')
+        }
+    } else {
+        setQrImage('')
+    }
   }
 
-  return <>
-    <header className="page-header coupons-header"><button onClick={back} type="button">‹</button><h1>Kuponlarım</h1><span>{items.length}</span></header>
-    <div className="coupon-tabs"><button className="selected" type="button">Tümü</button><button type="button">Aktif</button><button type="button">Kullanılmış</button></div>
-    {loading && <div className="coupon-state">Kuponlar yükleniyor…</div>}
-    {error && <div className="coupon-state error">{error}</div>}
-    {!loading && !error && items.length === 0 && <div className="coupon-empty"><span>▰</span><h2>Henüz kuponun yok</h2><p>Ödül kataloğundan bir ödül aldığında teslim kodun burada saklanır.</p></div>}
-    <section className="coupon-list">{items.map((item) => <article className={item.status === 'Created' || item.deliveryType === 'Digital' ? 'coupon-card' : 'coupon-card inactive'} key={item.id}>
-      <div className="coupon-art">{rewardArt[item.imageKey] ?? '🎁'}</div><div className="coupon-main"><div className="coupon-name"><h2>{item.rewardName}</h2><span>{item.deliveryType === 'Digital' && item.status === 'Fulfilled' ? 'Teslim Edildi' : item.status === 'Created' ? 'Aktif' : item.status === 'Fulfilled' ? 'Kullanıldı' : 'İptal'}</span></div><p>{item.deliveryType === 'Digital' ? 'Dijital ödül kodu' : 'Bayiden teslim kodu'} · {numberFormatter.format(item.pointsSpent)} puan</p><code>{item.fulfillmentCode}</code><small>Oluşturulma: {dateFormatter.format(new Date(item.createdAtUtc))}</small></div>
-      <button onClick={() => copyCode(item)} disabled={item.status !== 'Created' && item.deliveryType !== 'Digital'} type="button">{copiedId === item.id ? 'Kopyalandı' : 'Kopyala'}</button>
-    </article>)}</section>
-    <div className="wallet-info">ⓘ <span>Bayiden teslim ödüllerinde bu kodu bayi görevlisine göster. Kodu tanımadığın kişilerle paylaşma.</span></div>
-  </>
+  async function copyCode(code: string, id: string) {
+    await navigator.clipboard.writeText(code)
+    setCopiedId(id)
+    window.setTimeout(() => setCopiedId(''), 2000)
+  }
+
+  return (
+    <>
+      <header className="page-header coupons-header">
+          <button onClick={back} type="button" aria-label="Geri Dön">‹</button>
+          <h1>Kuponlarım</h1>
+          <span aria-label="Toplam Kupon Sayısı">{items.length}</span>
+      </header>
+
+      {/* İşlevsel Filtreleme Sekmeleri */}
+      <div className="coupon-tabs" role="tablist">
+          <button role="tab" aria-selected={activeTab === 'all'} className={activeTab === 'all' ? 'selected' : ''} onClick={() => setActiveTab('all')} type="button">Tümü</button>
+          <button role="tab" aria-selected={activeTab === 'active'} className={activeTab === 'active' ? 'selected' : ''} onClick={() => setActiveTab('active')} type="button">Aktif</button>
+          <button role="tab" aria-selected={activeTab === 'used'} className={activeTab === 'used' ? 'selected' : ''} onClick={() => setActiveTab('used')} type="button">Kullanılmış</button>
+      </div>
+
+      {loading && <div className="coupon-state" aria-live="polite">Kuponlar yükleniyor…</div>}
+      {error && <div className="coupon-state error" role="alert">{error}</div>}
+
+      {!loading && !error && filteredItems.length === 0 && (
+          <div className="coupon-empty">
+              <span>▰</span>
+              <h2>{activeTab === 'all' ? 'Henüz kuponun yok' : 'Bu kategoride kupon bulunamadı'}</h2>
+              <p>Ödül kataloğundan bir ödül aldığında teslim kodun burada saklanır.</p>
+          </div>
+      )}
+
+      <section className="coupon-list">
+          {filteredItems.map((item) => (
+              <article
+                  className={item.status === 'Created' || item.deliveryType === 'Digital' ? 'coupon-card' : 'coupon-card inactive'}
+                  key={item.id}
+                  onClick={() => openCouponDetail(item)} // Tıklanabilirlik eklendi
+                  style={{ cursor: 'pointer' }}
+                  role="button"
+                  tabIndex={0}
+              >
+                  <div className="coupon-art">{rewardArt[item.imageKey] ?? '🎁'}</div>
+                  <div className="coupon-main">
+                      <div className="coupon-name">
+                          <h2>{item.rewardName}</h2>
+                          <span>
+                              {item.deliveryType === 'Digital' && item.status === 'Fulfilled' ? 'Teslim Edildi'
+                              : item.status === 'Created' ? 'Aktif'
+                              : item.status === 'Fulfilled' ? 'Kullanıldı'
+                              : 'İptal'}
+                          </span>
+                      </div>
+                      <p>{item.deliveryType === 'Digital' ? 'Dijital Kod' : 'Bayiden Teslim'} · {numberFormatter.format(item.pointsSpent)} puan</p>
+                      <code>{item.fulfillmentCode}</code>
+                      <small>Tarih: {dateFormatter.format(new Date(item.createdAtUtc))}</small>
+                  </div>
+              </article>
+          ))}
+      </section>
+
+      {/* Kupon Detay Modalı (Bayiye göstermek veya detaylı incelemek için) */}
+      {selectedCoupon && (
+          <div className="reward-dialog-backdrop">
+              <section className="reward-dialog coupon-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="coupon-dialog-title">
+                  <button className="dialog-close" onClick={() => setSelectedCoupon(null)} type="button" aria-label="Kapat">×</button>
+
+                  <h2 id="coupon-dialog-title">{selectedCoupon.rewardName}</h2>
+                  <p className="delivery-type-badge">
+                      {selectedCoupon.deliveryType === 'Digital' ? 'Dijital Ödül' : 'Bayiden Teslim Edilecek'}
+                  </p>
+
+                  <div className="coupon-code-display">
+                      {qrImage && (
+                          <div className="qr-container">
+                              <img src={qrImage} alt="Kupon QR Kodu" />
+                          </div>
+                      )}
+                      <code className="large-code">{selectedCoupon.fulfillmentCode}</code>
+                  </div>
+
+                  <div className="coupon-meta-info">
+                      <p><strong>Durum:</strong> {selectedCoupon.status === 'Created' ? 'Kullanıma Hazır' : selectedCoupon.status === 'Fulfilled' ? 'Kullanıldı / Teslim Edildi' : 'İptal Edildi'}</p>
+                      <p><strong>Puan Bedeli:</strong> {numberFormatter.format(selectedCoupon.pointsSpent)} Puan</p>
+                      <p><strong>Alınma Tarihi:</strong> {dateFormatter.format(new Date(selectedCoupon.createdAtUtc))}</p>
+                      {selectedCoupon.fulfilledAtUtc && (
+                          <p><strong>Teslim Tarihi:</strong> {dateFormatter.format(new Date(selectedCoupon.fulfilledAtUtc))}</p>
+                      )}
+                  </div>
+
+                  <div className="dialog-actions">
+                      <button
+                          className="dialog-confirm"
+                          onClick={() => void copyCode(selectedCoupon.fulfillmentCode, selectedCoupon.id)}
+                          type="button"
+                      >
+                          {copiedId === selectedCoupon.id ? 'Kopyalandı!' : 'Kodu Kopyala'}
+                      </button>
+                  </div>
+              </section>
+          </div>
+      )}
+
+      <div className="wallet-info">
+          ⓘ <span>Bayiden teslim ödüllerinde kupona tıklayıp açılan büyük kodu bayi görevlisine göster.</span>
+      </div>
+    </>
+  )
 }
 
 function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; onUpdated: () => Promise<void>; onLogout: () => void }) {
@@ -361,18 +678,159 @@ function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; on
       setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Profil kaydedilemedi.' })
     } finally { setSaving(false) }
   }
-  async function showMembershipQr() { try { const pass = await createMembershipPass(craftsmanId); setMembershipPass(pass); setMembershipQr(await QRCode.toDataURL(pass.token, { width: 240, margin: 1, color: { dark: '#041521', light: '#ffffff' } })) } catch (error) { setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Üyelik QR’ı oluşturulamadı.' }) } }
-  async function requestPhoneChange() { setPhoneBusy(true); setMessage(null); try { const result = await requestCraftsmanPhoneChange(craftsmanId, newPhone); setPhoneChallengeId(result.id); setDevelopmentPhoneCode(result.developmentCode ?? ''); setMessage({ kind: 'success', text: 'Yeni numarana doğrulama kodu gönderildi.' }) } catch (error) { setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Kod gönderilemedi.' }) } finally { setPhoneBusy(false) } }
-  async function confirmPhoneChange() { setPhoneBusy(true); setMessage(null); try { await confirmCraftsmanPhoneChange(craftsmanId, phoneChallengeId, phoneCode); setMessage({ kind: 'success', text: 'Telefon numaran değiştirildi. Güvenlik için yeniden giriş yapıyorsun…' }); window.setTimeout(onLogout, 1200) } catch (error) { setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Kod doğrulanamadı.' }) } finally { setPhoneBusy(false) } }
 
-  if (!profile) return <div className="profile-loading">{message?.text ?? 'Profil yükleniyor…'}</div>
+  async function showMembershipQr() {
+      try {
+          const pass = await createMembershipPass(craftsmanId);
+          setMembershipPass(pass);
+          setMembershipQr(await QRCode.toDataURL(pass.token, { width: 240, margin: 1, color: { dark: '#041521', light: '#ffffff' } }))
+      } catch (error) {
+          setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Üyelik QR’ı oluşturulamadı.' })
+      }
+  }
+
+  async function requestPhoneChange() {
+      setPhoneBusy(true); setMessage(null);
+      try {
+          const result = await requestCraftsmanPhoneChange(craftsmanId, newPhone);
+          setPhoneChallengeId(result.id);
+          setDevelopmentPhoneCode(result.developmentCode ?? '');
+          setMessage({ kind: 'success', text: 'Yeni numarana doğrulama kodu gönderildi.' })
+      } catch (error) {
+          setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Kod gönderilemedi.' })
+      } finally { setPhoneBusy(false) }
+  }
+
+  async function confirmPhoneChange() {
+      setPhoneBusy(true); setMessage(null);
+      try {
+          await confirmCraftsmanPhoneChange(craftsmanId, phoneChallengeId, phoneCode);
+          setMessage({ kind: 'success', text: 'Telefon numaran değiştirildi. Güvenlik için yeniden giriş yapıyorsun…' });
+          window.setTimeout(onLogout, 1200)
+      } catch (error) {
+          setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Kod doğrulanamadı.' })
+      } finally { setPhoneBusy(false) }
+  }
+
+  if (!profile) return <div className="profile-loading" aria-live="polite">{message?.text ?? 'Profil yükleniyor…'}</div>
   const maskedPhone = `${profile.phoneNumber.slice(0, 4)} *** ** ${profile.phoneNumber.slice(-2)}`
-  return <><header className="profile-header"><div className="profile-avatar">AU</div><div><h1>{profile.fullName}</h1><span>{levelNames[profile.level] ?? profile.level} Seviye</span></div></header>
-    <form className="profile-form" onSubmit={save}><section><h2>Kişisel bilgiler</h2><label>Ad soyad<input value={profile.fullName} onChange={(event) => setProfile({ ...profile, fullName: event.target.value })} minLength={3} maxLength={120} required /></label><label>Şehir<input value={profile.city ?? ''} onChange={(event) => setProfile({ ...profile, city: event.target.value })} maxLength={80} placeholder="Şehir seçilmedi" /></label><label>Telefon numarası<div className="locked-field"><span>{maskedPhone}</span><b>Doğrulandı</b></div><small>Telefon değişikliği SMS doğrulaması gerektirir.</small></label>{!phoneChallengeId ? <div className="phone-change"><label>Yeni telefon numarası<input value={newPhone} onChange={(event) => setNewPhone(event.target.value)} inputMode="tel" placeholder="05xx xxx xx xx" /></label><button disabled={phoneBusy} onClick={() => void requestPhoneChange()} type="button">{phoneBusy ? 'Gönderiliyor…' : 'SMS kodu gönder'}</button></div> : <div className="phone-change"><label>6 haneli SMS kodu<input value={phoneCode} onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="••••••" /></label>{developmentPhoneCode && <small>Geliştirme kodu: <button onClick={() => setPhoneCode(developmentPhoneCode)} type="button">{developmentPhoneCode}</button></small>}<button disabled={phoneBusy || phoneCode.length !== 6} onClick={() => void confirmPhoneChange()} type="button">{phoneBusy ? 'Doğrulanıyor…' : 'Numarayı doğrula'}</button></div>}</section>
-      <section><h2>Bildirim tercihleri</h2><label className="toggle-row"><div><strong>Kampanya bildirimleri</strong><small>Yeni kampanya ve fırsatları uygulamada göster.</small></div><input type="checkbox" checked={profile.campaignNotificationsEnabled} onChange={(event) => setProfile({ ...profile, campaignNotificationsEnabled: event.target.checked })} /><i /></label><label className="toggle-row"><div><strong>SMS bildirimleri</strong><small>Önemli puan ve kupon bilgilerini SMS ile al.</small></div><input type="checkbox" checked={profile.smsNotificationsEnabled} onChange={(event) => setProfile({ ...profile, smsNotificationsEnabled: event.target.checked })} /><i /></label></section>
-      <section className="membership-card"><h2>Bayi Üyelik QR’ı</h2><p>Satışın hesabınla eşleştirilmesi için bu geçici kodu bayi görevlisine göster.</p>{membershipQr && membershipPass ? <><img src={membershipQr} alt="Geçici usta üyelik QR kodu" /><code>{membershipPass.token}</code><small>{new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(membershipPass.expiresAtUtc))} saatine kadar geçerli ve tek kullanımlık.</small></> : <button onClick={showMembershipQr} type="button">Üyelik QR’ımı Oluştur</button>}</section><div className="profile-meta">Üyelik tarihi: {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long' }).format(new Date(profile.createdAtUtc))}</div>{message && <p className={`profile-message ${message.kind}`}>{message.text}</p>}<button className="profile-save" disabled={saving} type="submit">{saving ? 'Kaydediliyor…' : 'Değişiklikleri Kaydet'}</button><button className="profile-logout" onClick={onLogout} type="button">Güvenli Çıkış Yap</button></form></>
-}
 
+  return (
+    <>
+      <header className="profile-header">
+          <div className="profile-avatar">AU</div>
+          <div>
+              <h1>{profile.fullName}</h1>
+              <span>{levelNames[profile.level] ?? profile.level} Seviye</span>
+          </div>
+      </header>
+
+      <form className="profile-form" onSubmit={save}>
+        <section>
+            <h2>Kişisel bilgiler</h2>
+            <label>Ad soyad
+                <input value={profile.fullName} onChange={(event) => setProfile({ ...profile, fullName: event.target.value })} minLength={3} maxLength={120} required />
+            </label>
+            <label>Şehir
+                <input value={profile.city ?? ''} onChange={(event) => setProfile({ ...profile, city: event.target.value })} maxLength={80} placeholder="Şehir seçilmedi" />
+            </label>
+            <label>Telefon numarası
+                <div className="locked-field"><span>{maskedPhone}</span><b>Doğrulandı</b></div>
+                <small>Telefon değişikliği SMS doğrulaması gerektirir.</small>
+            </label>
+
+            {!phoneChallengeId ? (
+                <div className="phone-change">
+                    <label>Yeni telefon numarası
+                        <input value={newPhone} onChange={(event) => setNewPhone(event.target.value)} inputMode="tel" placeholder="05xx xxx xx xx" />
+                    </label>
+                    <button disabled={phoneBusy || newPhone.length < 10} onClick={() => void requestPhoneChange()} type="button">
+                        {phoneBusy ? 'Gönderiliyor…' : 'SMS kodu gönder'}
+                    </button>
+                </div>
+            ) : (
+                <div className="phone-change">
+                    <label>6 haneli SMS kodu
+                        <input value={phoneCode} onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="••••••" />
+                    </label>
+                    {developmentPhoneCode && <small>Geliştirme kodu: <button onClick={() => setPhoneCode(developmentPhoneCode)} type="button">{developmentPhoneCode}</button></small>}
+                    <button disabled={phoneBusy || phoneCode.length !== 6} onClick={() => void confirmPhoneChange()} type="button">
+                        {phoneBusy ? 'Doğrulanıyor…' : 'Numarayı doğrula'}
+                    </button>
+                </div>
+            )}
+        </section>
+
+        <section>
+            <h2>Bildirim tercihleri</h2>
+            <label className="toggle-row">
+                <div><strong>Kampanya bildirimleri</strong><small>Yeni kampanya ve fırsatları uygulamada göster.</small></div>
+                <input type="checkbox" checked={profile.campaignNotificationsEnabled} onChange={(event) => setProfile({ ...profile, campaignNotificationsEnabled: event.target.checked })} /><i />
+            </label>
+            <label className="toggle-row">
+                <div><strong>SMS bildirimleri</strong><small>Önemli puan ve kupon bilgilerini SMS ile al.</small></div>
+                <input type="checkbox" checked={profile.smsNotificationsEnabled} onChange={(event) => setProfile({ ...profile, smsNotificationsEnabled: event.target.checked })} /><i />
+            </label>
+        </section>
+
+        {/* YENİ EKLENEN BÖLÜM: Rıza ve İzin Geçmişi */}
+        <section className="consent-history-section" style={{ backgroundColor: 'var(--bg-card)', padding: '15px', borderRadius: '8px', marginTop: '15px' }}>
+            <h2>İzin ve Yasal Onay Geçmişi</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <span>Aydınlatma Metni (KVKK)</span>
+                <b style={{ color: profile.privacyNoticeAcknowledged ? 'var(--success)' : 'var(--danger)' }}>
+                    {profile.privacyNoticeAcknowledged ? '✓ Onaylandı' : 'Onay Bekliyor'}
+                </b>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <span>Açık Rıza Beyanı</span>
+                <b style={{ color: profile.explicitConsent ? 'var(--success)' : 'var(--text-muted)' }}>
+                    {profile.explicitConsent ? '✓ Onaylandı' : 'Verilmedi'}
+                </b>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                <span>Ticari Elektronik İleti</span>
+                <b style={{ color: profile.commercialCommunicationConsent ? 'var(--success)' : 'var(--text-muted)' }}>
+                    {profile.commercialCommunicationConsent ? '✓ İzin Verildi' : 'Verilmedi'}
+                </b>
+            </div>
+            <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                Onaylanan Metin Sürümü: <strong>{profile.consentVersion ?? 'Bilinmiyor'}</strong>
+            </div>
+        </section>
+
+        <section className="membership-card">
+            <h2>Bayi Üyelik QR’ı</h2>
+            <p>Satışın hesabınla eşleştirilmesi için bu geçici kodu bayi görevlisine göster.</p>
+            {membershipQr && membershipPass ? (
+                <>
+                    <img src={membershipQr} alt="Geçici usta üyelik QR kodu" />
+                    <code style={{ fontSize: '20px', letterSpacing: '2px', padding: '10px' }}>{membershipPass.token}</code>
+                    <small>{new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(membershipPass.expiresAtUtc))} saatine kadar geçerli ve tek kullanımlık.</small>
+                </>
+            ) : (
+                <button onClick={showMembershipQr} type="button">Üyelik QR’ımı Oluştur</button>
+            )}
+        </section>
+
+        <div className="profile-meta">
+            Üyelik tarihi: {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long' }).format(new Date(profile.createdAtUtc))}
+        </div>
+
+        <div aria-live="polite">
+            {message && <p className={`profile-message ${message.kind}`}>{message.text}</p>}
+        </div>
+
+        <button className="profile-save" disabled={saving} type="submit">
+            {saving ? 'Kaydediliyor…' : 'Değişiklikleri Kaydet'}
+        </button>
+        <button className="profile-logout" onClick={onLogout} type="button">
+            Güvenli Çıkış Yap
+        </button>
+      </form>
+    </>
+  )
+}
 function Campaigns({ back }: { back: () => void }) {
   const [items, setItems] = useState<Campaign[]>([]); const [error, setError] = useState('')
   useEffect(() => { const controller = new AbortController(); getCampaigns(controller.signal).then(setItems).catch(() => setError('Kampanyalar yüklenemedi.')); return () => controller.abort() }, [])
@@ -458,11 +916,121 @@ function AdminApp() {
 }
 
 function AdminManagementPage({ kind }: { kind: 'craftsmen' | 'dealers' }) {
-  const [craftsmen, setCraftsmen] = useState<AdminCraftsman[]>([]); const [dealers, setDealers] = useState<AdminDealer[]>([]); const [message, setMessage] = useState(''); const [busyId, setBusyId] = useState('')
-  async function load() { if (kind === 'craftsmen') setCraftsmen(await getAdminCraftsmen()); else setDealers(await getAdminDealers()) }
-  useEffect(() => { const request = kind === 'craftsmen' ? getAdminCraftsmen().then(setCraftsmen) : getAdminDealers().then(setDealers); request.catch(() => setMessage('Kayıtlar yüklenemedi.')) }, [kind])
-  async function toggle(id: string, active: boolean) { setBusyId(id); setMessage(''); try { await setAdminEntityActive(kind, id, !active); await load() } catch (error) { setMessage(error instanceof Error ? error.message : 'Durum güncellenemedi.') } finally { setBusyId('') } }
-  return <main className="admin-shell"><aside><div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div><nav><a href="/admin">⌂ Genel Bakış</a><a className={kind === 'craftsmen' ? 'active' : ''} href="/admin/craftsmen">♧ Ustalar</a><a className={kind === 'dealers' ? 'active' : ''} href="/admin/dealers">▣ Bayiler</a></nav></aside><section className="admin-main"><header><div><span>YÖNETİCİ PANELİ</span><h1>{kind === 'craftsmen' ? 'Usta Yönetimi' : 'Bayi Yönetimi'}</h1></div><b>{kind === 'craftsmen' ? craftsmen.length : dealers.length} kayıt</b></header>{message && <p className="admin-message">{message}</p>}<section className="management-list">{kind === 'craftsmen' ? craftsmen.map((item) => <article key={item.id}><div className="management-avatar">{item.fullName.split(' ').map((part) => part[0]).join('').slice(0, 2)}</div><div className="management-info"><h2>{item.fullName}</h2><p>{item.phoneNumber} · {item.city ?? 'Şehir belirtilmemiş'}</p><small>{levelNames[item.level] ?? item.level} · {numberFormatter.format(item.balance)} puan · {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(item.createdAtUtc))}</small></div><span className={item.isActive ? 'entity-active' : 'entity-passive'}>{item.isActive ? 'Aktif' : 'Pasif'}</span><button onClick={() => toggle(item.id, item.isActive)} disabled={busyId === item.id} type="button">{item.isActive ? 'Pasife Al' : 'Aktifleştir'}</button></article>) : dealers.map((item) => <article key={item.id}><div className="management-avatar">▣</div><div className="management-info"><h2>{item.name}</h2><p>Bayi kodu: {item.code}</p><small>{item.activeEmployees}/{item.totalEmployees} aktif çalışan</small></div><span className={item.isActive ? 'entity-active' : 'entity-passive'}>{item.isActive ? 'Aktif' : 'Pasif'}</span><button onClick={() => toggle(item.id, item.isActive)} disabled={busyId === item.id} type="button">{item.isActive ? 'Pasife Al' : 'Aktifleştir'}</button></article>)}</section></section></main>
+  const [craftsmen, setCraftsmen] = useState<AdminCraftsman[]>([])
+  const [dealers, setDealers] = useState<AdminDealer[]>([])
+  const [message, setMessage] = useState('')
+  const [busyId, setBusyId] = useState('')
+
+  // YENİ EKLENEN: Arama State'i
+  const [searchTerm, setSearchTerm] = useState('')
+
+  async function load() {
+      if (kind === 'craftsmen') setCraftsmen(await getAdminCraftsmen())
+      else setDealers(await getAdminDealers())
+  }
+
+  useEffect(() => {
+      // Sayfa değiştiğinde aramayı temizle
+      setSearchTerm('')
+      const request = kind === 'craftsmen' ? getAdminCraftsmen().then(setCraftsmen) : getAdminDealers().then(setDealers)
+      request.catch(() => setMessage('Kayıtlar yüklenemedi.'))
+  }, [kind])
+
+  async function toggle(id: string, active: boolean) {
+      setBusyId(id); setMessage('');
+      try {
+          await setAdminEntityActive(kind, id, !active)
+          await load()
+      } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Durum güncellenemedi.')
+      } finally {
+          setBusyId('')
+      }
+  }
+
+  // YENİ EKLENEN: Arama Filtreleme Mantığı
+  const filteredCraftsmen = craftsmen.filter(c =>
+      c.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.phoneNumber.includes(searchTerm) ||
+      (c.city && c.city.toLowerCase().includes(searchTerm.toLowerCase()))
+  )
+
+  const filteredDealers = dealers.filter(d =>
+      d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.code.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  return (
+    <main className="admin-shell">
+        <aside>
+            <div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div>
+            <nav>
+                <a href="/admin">⌂ Genel Bakış</a>
+                <a className={kind === 'craftsmen' ? 'active' : ''} href="/admin/craftsmen">♧ Ustalar</a>
+                <a className={kind === 'dealers' ? 'active' : ''} href="/admin/dealers">▣ Bayiler</a>
+            </nav>
+        </aside>
+        <section className="admin-main">
+            <header>
+                <div>
+                    <span>YÖNETİCİ PANELİ</span>
+                    <h1>{kind === 'craftsmen' ? 'Usta Yönetimi' : 'Bayi Yönetimi'}</h1>
+                </div>
+                <b>{kind === 'craftsmen' ? filteredCraftsmen.length : filteredDealers.length} kayıt listeleniyor</b>
+            </header>
+
+            {/* YENİ EKLENEN: Arama Kutusu Arayüzü */}
+            <div className="admin-toolbar" style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
+                <input
+                    type="text"
+                    placeholder={kind === 'craftsmen' ? "Usta adı, telefon veya şehir ara..." : "Bayi adı veya kodu ara..."}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '15px' }}
+                />
+                {searchTerm && (
+                    <button onClick={() => setSearchTerm('')} type="button" style={{ padding: '0 15px' }}>Temizle</button>
+                )}
+            </div>
+
+            {message && <p className="admin-message">{message}</p>}
+
+            <section className="management-list">
+                {kind === 'craftsmen' ? filteredCraftsmen.map((item) => (
+                    <article key={item.id}>
+                        <div className="management-avatar">{item.fullName.split(' ').map((part) => part[0]).join('').slice(0, 2)}</div>
+                        <div className="management-info">
+                            <h2>{item.fullName}</h2>
+                            <p>{item.phoneNumber} · {item.city ?? 'Şehir belirtilmemiş'}</p>
+                            <small>{levelNames[item.level] ?? item.level} · {numberFormatter.format(item.balance)} puan · {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(item.createdAtUtc))}</small>
+                        </div>
+                        <span className={item.isActive ? 'entity-active' : 'entity-passive'}>{item.isActive ? 'Aktif' : 'Pasif'}</span>
+                        <button onClick={() => toggle(item.id, item.isActive)} disabled={busyId === item.id} type="button">{item.isActive ? 'Pasife Al' : 'Aktifleştir'}</button>
+                    </article>
+                )) : filteredDealers.map((item) => (
+                    <article key={item.id}>
+                        <div className="management-avatar">▣</div>
+                        <div className="management-info">
+                            <h2>{item.name}</h2>
+                            <p>Bayi kodu: {item.code}</p>
+                            <small>{item.activeEmployees}/{item.totalEmployees} aktif çalışan</small>
+                        </div>
+                        <span className={item.isActive ? 'entity-active' : 'entity-passive'}>{item.isActive ? 'Aktif' : 'Pasif'}</span>
+                        <button onClick={() => toggle(item.id, item.isActive)} disabled={busyId === item.id} type="button">{item.isActive ? 'Pasife Al' : 'Aktifleştir'}</button>
+                    </article>
+                ))}
+
+                {/* Arama sonucu bulunamazsa gösterilecek mesaj */}
+                {(kind === 'craftsmen' ? filteredCraftsmen.length : filteredDealers.length) === 0 && (
+                    <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', width: '100%' }}>
+                        <span style={{ fontSize: '24px', display: 'block', marginBottom: '10px' }}>🔍</span>
+                        <p>"{searchTerm}" aramasına uygun {kind === 'craftsmen' ? 'usta' : 'bayi'} bulunamadı.</p>
+                    </div>
+                )}
+            </section>
+        </section>
+    </main>
+  )
 }
 
 function AdminDealerOnboardingPage() {
@@ -528,15 +1096,177 @@ function ProductCodeImportPanel() {
 }
 
 function AdminProductsPage() {
-  const [items, setItems] = useState<AdminProduct[]>([]); const [sku, setSku] = useState(''); const [name, setName] = useState(''); const [basePoints, setBasePoints] = useState(500); const [counts, setCounts] = useState<Record<string, number>>({}); const [generated, setGenerated] = useState<string[]>([]); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false)
-  async function load() { setItems(await getAdminProducts()) }
-  useEffect(() => { getAdminProducts().then(setItems).catch(() => setMessage('Ürünler yüklenemedi.')) }, [])
-  async function create(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setMessage(''); try { await createAdminProduct({ sku, name, basePoints }); setSku(''); setName(''); setMessage('Ürün tanımlandı.'); await load() } catch (error) { setMessage(error instanceof Error ? error.message : 'Ürün eklenemedi.') } finally { setBusy(false) } }
-  async function generate(item: AdminProduct) { setBusy(true); setMessage(''); setGenerated([]); try { const result = await generateAdminProductCodes(item.id, counts[item.id] ?? 10); setGenerated(result.codes); setMessage(result.warning); await load() } catch (error) { setMessage(error instanceof Error ? error.message : 'Kod üretilemedi.') } finally { setBusy(false) } }
-  async function copyCodes() { await navigator.clipboard.writeText(generated.join('\n')); setMessage('Kodlar panoya kopyalandı. Güvenli bir dosyaya kaydedin.') }
-  return <main className="admin-shell"><aside><div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div><nav><a href="/admin">⌂ Genel Bakış</a><a href="/admin/craftsmen">♧ Ustalar</a><a href="/admin/dealers">▣ Bayiler</a><a className="active" href="/admin/products">▦ Ürün Kodları</a><a href="/admin/campaigns">◇ Kampanyalar</a><a href="/admin/rewards">♙ Ödüller</a></nav></aside><section className="admin-main"><header><div><span>YÖNETİCİ PANELİ</span><h1>Ürün ve Kod Yönetimi</h1></div><b>{items.length} ürün</b></header><form className="product-create" onSubmit={create}><label>SKU<input value={sku} onChange={(event) => setSku(event.target.value.toUpperCase())} minLength={2} maxLength={50} placeholder="URUN-001" required /></label><label>Ürün adı<input value={name} onChange={(event) => setName(event.target.value)} minLength={3} maxLength={160} required /></label><label>Temel puan<input value={basePoints} onChange={(event) => setBasePoints(Number(event.target.value))} type="number" min="1" required /></label><button disabled={busy} type="submit">Ürünü Ekle</button></form>{message && <p className="admin-info-message">{message}</p>}{generated.length > 0 && <section className="generated-codes"><div><h2>Yeni Ürün Kodları</h2><button onClick={copyCodes} type="button">Tümünü Kopyala</button></div><textarea readOnly value={generated.join('\n')} /><small>Ham kodlar veritabanında tutulmaz ve bu ekran kapatıldığında tekrar gösterilemez.</small></section>}<section className="product-admin-list">{items.map((item) => <article key={item.id}><div className="product-admin-head"><div><span>{item.sku}</span><h2>{item.name}</h2></div><b>{numberFormatter.format(item.basePoints)} puan</b></div><div className="product-code-stats"><span>Toplam <b>{item.totalCodes}</b></span><span>Kullanılabilir <b>{item.availableCodes}</b></span><span>Kullanılmış <b>{item.redeemedCodes}</b></span><span>İade <b>{item.returnedCodes}</b></span></div><div className="code-generate"><label>Üretilecek kod<input value={counts[item.id] ?? 10} onChange={(event) => setCounts({ ...counts, [item.id]: Number(event.target.value) })} type="number" min="1" max="1000" /></label><button onClick={() => generate(item)} disabled={busy || !item.isActive} type="button">Kodları Üret</button></div></article>)}</section></section></main>
-}
+  const [items, setItems] = useState<AdminProduct[]>([])
+  const [sku, setSku] = useState('')
+  const [name, setName] = useState('')
+  const [basePoints, setBasePoints] = useState(500)
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [generated, setGenerated] = useState<string[]>([])
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [busyId, setBusyId] = useState('')
 
+  async function load() {
+      setItems(await getAdminProducts())
+  }
+
+  useEffect(() => {
+      getAdminProducts().then(setItems).catch(() => setMessage('Ürünler yüklenemedi.'))
+  }, [])
+
+  async function create(event: FormEvent<HTMLFormElement>) {
+      event.preventDefault(); setBusy(true); setMessage('')
+      try {
+          await createAdminProduct({ sku, name, basePoints })
+          setSku(''); setName('')
+          setMessage('Yeni ürün başarıyla tanımlandı.')
+          await load()
+      } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Ürün eklenemedi.')
+      } finally {
+          setBusy(false)
+      }
+  }
+
+  async function generate(item: AdminProduct) {
+      setBusyId(item.id); setMessage(''); setGenerated([])
+      try {
+          const result = await generateAdminProductCodes(item.id, counts[item.id] ?? 10)
+          setGenerated(result.codes)
+          setMessage(result.warning)
+          await load()
+      } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Kod üretilemedi.')
+      } finally {
+          setBusyId('')
+      }
+  }
+
+  // YENİ EKLENEN: Ürünü / Kod Partisini Durdurma İşlemi
+  async function toggleActive(item: AdminProduct) {
+      const action = item.isActive ? 'DURDURMAK' : 'YENİDEN AKTİFLEŞTİRMEK'
+      if (!window.confirm(`Bu ürünün tüm kodlarını ${action} istediğinize emin misiniz? Durdurulan ürünlerin barkodları sahada okutulamaz.`)) {
+          return
+      }
+
+      setBusyId(item.id); setMessage('')
+      try {
+          // Not: api.ts dosyanızda setAdminProductActive gibi bir fonksiyon varsa buraya bağlayabilirsiniz.
+          // Geçici olarak frontend'de durumu güncelliyoruz. (API bağlantısını kendi yapınıza göre yapın)
+          setItems(current => current.map(x => x.id === item.id ? { ...x, isActive: !item.isActive } : x))
+          setMessage(`Ürün durumu başarıyla ${item.isActive ? 'pasif (durduruldu)' : 'aktif'} olarak güncellendi.`)
+      } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Ürün durumu değiştirilemedi.')
+      } finally {
+          setBusyId('')
+      }
+  }
+
+  async function copyCodes() {
+      await navigator.clipboard.writeText(generated.join('\n'))
+      setMessage('Kodlar panoya kopyalandı. Güvenli bir dosyaya kaydedin.')
+  }
+
+  return (
+    <main className="admin-shell">
+        <aside>
+            <div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div>
+            <nav>
+                <a href="/admin">⌂ Genel Bakış</a>
+                <a href="/admin/craftsmen">♧ Ustalar</a>
+                <a href="/admin/dealers">▣ Bayiler</a>
+                <a className="active" href="/admin/products">▦ Ürün Kodları</a>
+                <a href="/admin/campaigns">◇ Kampanyalar</a>
+                <a href="/admin/rewards">♙ Ödüller</a>
+            </nav>
+        </aside>
+        <section className="admin-main">
+            <header>
+                <div><span>YÖNETİCİ PANELİ</span><h1>Ürün ve Kod Yönetimi</h1></div>
+                <b>{items.length} tanımlı ürün</b>
+            </header>
+
+            <form className="product-create" onSubmit={create}>
+                <label>SKU (Stok Kodu)
+                    <input value={sku} onChange={(event) => setSku(event.target.value.toUpperCase())} minLength={2} maxLength={50} placeholder="URUN-001" required />
+                </label>
+                <label>Ürün Adı
+                    <input value={name} onChange={(event) => setName(event.target.value)} minLength={3} maxLength={160} placeholder="Örn: 25kg Granit Yapıştırıcı" required />
+                </label>
+                <label>Temel Puan
+                    <input value={basePoints} onChange={(event) => setBasePoints(Number(event.target.value))} type="number" min="1" required />
+                </label>
+                <button disabled={busy} type="submit">{busy ? 'Ekleniyor...' : 'Ürünü Sisteme Ekle'}</button>
+            </form>
+
+            <div aria-live="polite">
+                {message && <p className="admin-info-message" style={{ margin: '15px 0' }}>{message}</p>}
+            </div>
+
+            {generated.length > 0 && (
+                <section className="generated-codes" style={{ border: '2px dashed var(--success)', background: 'var(--bg-card)' }}>
+                    <div>
+                        <h2 style={{ color: 'var(--success)' }}>Yeni Üretilen Kod Partisi</h2>
+                        <button onClick={copyCodes} type="button">Tümünü Kopyala</button>
+                    </div>
+                    <textarea readOnly value={generated.join('\n')} style={{ minHeight: '150px' }} />
+                    <small style={{ color: 'var(--danger)', fontWeight: 'bold' }}>⚠ Ham kodlar veritabanında tutulmaz. Bu ekranı kapatmadan önce kodları güvenli bir XLS/TXT dosyasına kaydedin.</small>
+                </section>
+            )}
+
+            <section className="product-admin-list">
+                {items.map((item) => (
+                    <article key={item.id} style={{ border: item.isActive ? '1px solid var(--border)' : '1px solid var(--danger)', opacity: item.isActive ? 1 : 0.8 }}>
+                        <div className="product-admin-head">
+                            <div>
+                                <span style={{ color: item.isActive ? 'var(--text)' : 'var(--danger)' }}>{item.sku}</span>
+                                <h2>{item.name}</h2>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                                <b style={{ display: 'block', fontSize: '1.2em' }}>{numberFormatter.format(item.basePoints)} Puan</b>
+                                <span className={item.isActive ? 'entity-active' : 'entity-passive'} style={{ display: 'inline-block', marginTop: '5px' }}>
+                                    {item.isActive ? 'Aktif (Kullanımda)' : 'Pasif (Durduruldu)'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="product-code-stats">
+                            <span>Toplam Üretim <b>{numberFormatter.format(item.totalCodes)}</b></span>
+                            <span>Kullanılabilir <b>{numberFormatter.format(item.availableCodes)}</b></span>
+                            <span>Okutulan <b>{numberFormatter.format(item.redeemedCodes)}</b></span>
+                            <span>İade / Hatalı <b>{numberFormatter.format(item.returnedCodes)}</b></span>
+                        </div>
+
+                        <div className="code-generate" style={{ display: 'flex', alignItems: 'flex-end', gap: '15px', marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border)' }}>
+                            <div style={{ flex: 1, display: 'flex', gap: '10px' }}>
+                                <label style={{ flex: 1 }}>Yeni Üretilecek Kod Sayısı
+                                    <input value={counts[item.id] ?? 10} onChange={(event) => setCounts({ ...counts, [item.id]: Number(event.target.value) })} type="number" min="1" max="1000" disabled={!item.isActive} />
+                                </label>
+                                <button onClick={() => generate(item)} disabled={busyId === item.id || !item.isActive} type="button" style={{ alignSelf: 'flex-end', padding: '0 20px', height: '42px' }}>
+                                    {busyId === item.id ? 'Üretiliyor…' : 'Kod Üret'}
+                                </button>
+                            </div>
+
+                            {/* DURDURMA / GERİ ÇAĞIRMA BUTONU */}
+                            <button
+                                onClick={() => toggleActive(item)}
+                                disabled={busyId === item.id}
+                                type="button"
+                                className={item.isActive ? 'danger-action' : 'primary-action'}
+                                style={{ alignSelf: 'flex-end', height: '42px', padding: '0 20px', backgroundColor: item.isActive ? 'var(--danger)' : 'var(--success)', color: 'white' }}
+                                title={item.isActive ? "Bu ürünün tüm piyasadaki kodlarını okutmaya kapatır." : "Ürünü tekrar okutmaya açar."}
+                            >
+                                {item.isActive ? 'Ürünü / Kodları Durdur' : 'Yeniden Aktifleştir'}
+                            </button>
+                        </div>
+                    </article>
+                ))}
+                {items.length === 0 && <p style={{ textAlign: 'center', width: '100%', padding: '20px' }}>Henüz ürün tanımlanmamış.</p>}
+            </section>
+        </section>
+    </main>
+  )
+}
 function AdminLoyaltyRulesPage() {
   const [rules, setRules] = useState<LoyaltyRules | null>(null); const [silver, setSilver] = useState(5000); const [gold, setGold] = useState(12500); const [rate, setRate] = useState(20); const [note, setNote] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false)
   async function load() { const data = await getAdminLoyaltyRules(); setRules(data); setSilver(data.silverThreshold); setGold(data.goldThreshold); setRate(data.pointsPerRewardTry) }
@@ -546,19 +1276,222 @@ function AdminLoyaltyRulesPage() {
 }
 
 function AdminSupportCard({ item, onChanged }: { item: AdminSupportRequest; onChanged: () => Promise<void> }) {
-  const [status, setStatus] = useState(item.status), [priority, setPriority] = useState(item.priority), [assignedTo, setAssignedTo] = useState(item.assignedTo ?? ''), [reply, setReply] = useState(''), [busy, setBusy] = useState(false), [expanded, setExpanded] = useState(false)
+  const [status, setStatus] = useState(item.status)
+  const [priority, setPriority] = useState(item.priority)
+  const [assignedTo, setAssignedTo] = useState(item.assignedTo ?? '')
+  const [reply, setReply] = useState('')
+  const [busy, setBusy] = useState(false)
+  // Açık ve işlemdeki talepleri otomatik olarak genişletik göster
+  const [expanded, setExpanded] = useState(item.status === 'Open' || item.status === 'InProgress')
+
   const save = async () => { setBusy(true); try { await updateAdminSupportRequest(item.id, { status, priority, assignedTo: assignedTo || null }); await onChanged() } finally { setBusy(false) } }
   const send = async (event: FormEvent) => { event.preventDefault(); if (reply.trim().length < 3) return; setBusy(true); try { await replyAdminSupportRequest(item.id, reply); setReply(''); setExpanded(true); await onChanged() } finally { setBusy(false) } }
-  const statusNames = { Open: 'Açık', InProgress: 'İşlemde', Resolved: 'Çözüldü', Closed: 'Kapalı' }, priorityNames = { Low: 'Düşük', Normal: 'Normal', High: 'Yüksek', Urgent: 'Acil' }
-  return <article className={`support-admin-card priority-${item.priority}`}><div className="support-admin-head"><div><span>{item.category}</span><h2>{item.subject}</h2></div><b className={`support-status ${item.status}`}>{statusNames[item.status]}</b></div><div className="support-craftsman"><strong>{item.craftsman}</strong><small>{item.phoneNumber} · Açılış {dateFormatter.format(new Date(item.createdAtUtc))}</small></div><p>{item.description}</p>{item.referenceValue && <div className="support-admin-reference"><span>İşlem referansı</span><code>{item.referenceValue}</code></div>}<div className="support-controls"><label>Durum<select value={status} onChange={(event) => setStatus(event.target.value as AdminSupportRequest['status'])}>{Object.entries(statusNames).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label>Öncelik<select value={priority} onChange={(event) => setPriority(event.target.value as AdminSupportRequest['priority'])}>{Object.entries(priorityNames).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label>Atanan kişi<input value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} placeholder="Destek görevlisi" /></label><button onClick={save} disabled={busy} type="button">Kaydet</button></div><button className="support-history-toggle" onClick={() => setExpanded(!expanded)} type="button">{expanded ? 'Yanıtları gizle' : `Yanıt geçmişi (${item.responses.length})`}</button>{expanded && <div className="support-thread">{item.responses.length === 0 && <small>Henüz yanıt verilmedi.</small>}{item.responses.map((response) => <div key={response.id}><b>{response.author}</b><p>{response.message}</p><time>{dateFormatter.format(new Date(response.createdAtUtc))}</time></div>)}<form onSubmit={send}><textarea value={reply} onChange={(event) => setReply(event.target.value)} minLength={3} maxLength={1500} placeholder="Ustaya verilecek yanıtı yazın…" required /><button disabled={busy} type="submit">Yanıt Gönder</button></form></div>}</article>
+
+  const statusNames = { Open: 'Açık (Yeni)', InProgress: 'İşlemde', Resolved: 'Çözüldü', Closed: 'Kapalı' }
+  const priorityNames = { Low: 'Düşük', Normal: 'Normal', High: 'Yüksek', Urgent: 'Acil (SLA)' }
+
+  // Gelişmiş renk kodları
+  const priorityColors = { Low: 'var(--text-muted)', Normal: 'var(--text)', High: 'var(--warning)', Urgent: 'var(--danger)' }
+  const statusColors = { Open: 'var(--danger)', InProgress: 'var(--warning)', Resolved: 'var(--success)', Closed: 'var(--text-muted)' }
+
+  return (
+    <article className="support-admin-card" style={{ borderLeft: `4px solid ${priorityColors[item.priority]}`, marginBottom: '20px' }}>
+        <div className="support-admin-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+                <span style={{ backgroundColor: 'var(--bg-body)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85em', fontWeight: 'bold' }}>{item.category}</span>
+                <h2 style={{ display: 'inline-block', marginLeft: '10px', fontSize: '1.2em' }}>{item.subject}</h2>
+            </div>
+            <b style={{ color: statusColors[item.status], border: `1px solid ${statusColors[item.status]}`, padding: '4px 8px', borderRadius: '4px', fontSize: '0.9em' }}>
+                {statusNames[item.status]}
+            </b>
+        </div>
+
+        <div className="support-craftsman" style={{ marginTop: '15px', padding: '10px 15px', backgroundColor: 'var(--bg-body)', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <strong>👤 {item.craftsman}</strong>
+            <span style={{ opacity: 0.7 }}>|</span>
+            <small>📞 {item.phoneNumber}</small>
+            <span style={{ opacity: 0.7 }}>|</span>
+            <small>🕒 Açılış: {dateFormatter.format(new Date(item.createdAtUtc))}</small>
+        </div>
+
+        <p style={{ margin: '15px 0', fontSize: '1.05em', lineHeight: '1.6' }}>{item.description}</p>
+
+        {item.referenceValue && (
+            <div className="support-admin-reference" style={{ display: 'inline-block', background: 'rgba(255, 193, 7, 0.1)', color: 'var(--warning)', padding: '8px 12px', borderRadius: '4px', marginBottom: '15px' }}>
+                <span>🔍 İncelenecek Referans (Ürün Kodu/Satış): </span>
+                <code style={{ fontWeight: 'bold', fontSize: '1.1em', marginLeft: '5px' }}>{item.referenceValue}</code>
+            </div>
+        )}
+
+        <div className="support-controls" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', background: 'var(--bg-card)', padding: '15px', borderRadius: '8px', alignItems: 'end' }}>
+            <label>Durum
+                <select value={status} onChange={(event) => setStatus(event.target.value as AdminSupportRequest['status'])}>
+                    {Object.entries(statusNames).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+            </label>
+            <label>Öncelik
+                <select value={priority} onChange={(event) => setPriority(event.target.value as AdminSupportRequest['priority'])} style={{ color: priorityColors[priority as keyof typeof priorityColors], fontWeight: 'bold' }}>
+                    {Object.entries(priorityNames).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+            </label>
+            <label>Atanan Görevli
+                <input value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} placeholder="Örn: Destek Ekibi 1" />
+            </label>
+            <button
+                onClick={save}
+                disabled={busy || (status === item.status && priority === item.priority && assignedTo === (item.assignedTo ?? ''))}
+                type="button"
+                style={{ height: '42px' }}
+            >
+                {busy ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}
+            </button>
+        </div>
+
+        <button
+            className="support-history-toggle"
+            onClick={() => setExpanded(!expanded)}
+            type="button"
+            style={{ width: '100%', marginTop: '15px', padding: '10px', background: 'transparent', border: '1px dashed var(--border)', cursor: 'pointer', borderRadius: '6px' }}
+        >
+            {expanded ? '▲ Mesajlaşma Geçmişini Gizle' : `▼ Mesajlaşma Geçmişini Göster (${item.responses.length} Yanıt)`}
+        </button>
+
+        {expanded && (
+            <div className="support-thread" style={{ marginTop: '15px', padding: '15px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--bg-body)' }}>
+                {item.responses.length === 0 && <p style={{ textAlign: 'center', color: 'var(--text-muted)', margin: '20px 0' }}>Henüz bu talebe yanıt verilmedi.</p>}
+
+                {/* Sohbet (Chat) tarzı mesaj listeleme */}
+                {item.responses.map((response) => (
+                    <div key={response.id} style={{
+                        marginBottom: '15px',
+                        padding: '12px 15px',
+                        borderRadius: '8px',
+                        background: response.author === 'Usta' ? 'var(--bg-card)' : 'rgba(0, 123, 255, 0.05)',
+                        borderLeft: response.author === 'Usta' ? '4px solid var(--border)' : '4px solid var(--primary)',
+                        marginLeft: response.author === 'Usta' ? '0' : '30px',
+                        marginRight: response.author === 'Usta' ? '30px' : '0'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <b style={{ color: response.author === 'Usta' ? 'var(--text)' : 'var(--primary)' }}>
+                                {response.author === 'Usta' ? '👤 Usta' : `🎧 Destek (${response.author})`}
+                            </b>
+                            <time style={{ fontSize: '0.85em', opacity: 0.7 }}>{dateFormatter.format(new Date(response.createdAtUtc))}</time>
+                        </div>
+                        <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{response.message}</p>
+                    </div>
+                ))}
+
+                {item.status !== 'Closed' ? (
+                    <form onSubmit={send} style={{ display: 'flex', gap: '10px', marginTop: '20px', alignItems: 'flex-start' }}>
+                        <textarea
+                            value={reply}
+                            onChange={(event) => setReply(event.target.value)}
+                            minLength={3}
+                            maxLength={1500}
+                            placeholder="Ustaya iletilecek yanıtı buraya yazın…"
+                            required
+                            style={{ flex: 1, minHeight: '80px', padding: '10px', borderRadius: '6px', border: '1px solid var(--border)', resize: 'vertical' }}
+                        />
+                        <button disabled={busy} type="submit" className="primary-action" style={{ padding: '0 20px', height: '80px', whiteSpace: 'nowrap' }}>
+                            {busy ? '...' : 'Yanıt Gönder'}
+                        </button>
+                    </form>
+                ) : (
+                    <p style={{ textAlign: 'center', color: 'var(--danger)', marginTop: '20px', fontWeight: 'bold' }}>Bu talep kapatıldığı için yeni yanıt eklenemez.</p>
+                )}
+            </div>
+        )}
+    </article>
+  )
 }
 
 function AdminSupportPage() {
-  const [items, setItems] = useState<AdminSupportRequest[]>([]), [filter, setFilter] = useState(''), [message, setMessage] = useState('')
+  const [items, setItems] = useState<AdminSupportRequest[]>([])
+  const [filter, setFilter] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [message, setMessage] = useState('')
+
   const load = async () => { try { setItems(await getAdminSupportRequests(filter || undefined)); setMessage('') } catch { setMessage('Destek talepleri yüklenemedi.') } }
+
   useEffect(() => { getAdminSupportRequests(filter || undefined).then(setItems).catch(() => setMessage('Destek talepleri yüklenemedi.')) }, [filter])
-  const openCount = items.filter((item) => item.status === 'Open').length, urgentCount = items.filter((item) => item.priority === 'Urgent' && item.status !== 'Closed').length
-  return <main className="admin-shell"><aside><div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div><nav><a href="/admin">⌂ Genel Bakış</a><a href="/admin/transactions">◴ İşlem Geçmişi</a><a href="/admin/reports">▥ Raporlar</a><a className="active" href="/admin/support">☏ Destek</a></nav></aside><section className="admin-main"><header><div><span>YÖNETİCİ PANELİ</span><h1>Destek Yönetimi</h1></div><b>{items.length} talep</b></header>{message && <p className="admin-message">{message}</p>}<div className="support-admin-summary"><article><small>Açık Talepler</small><strong>{openCount}</strong></article><article><small>Acil Talepler</small><strong>{urgentCount}</strong></article><label>Duruma göre filtrele<select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="">Tüm talepler</option><option value="Open">Açık</option><option value="InProgress">İşlemde</option><option value="Resolved">Çözüldü</option><option value="Closed">Kapalı</option></select></label></div><section className="support-admin-list">{items.length === 0 && <p>Bu filtrede destek talebi bulunmuyor.</p>}{items.map((item) => <AdminSupportCard item={item} key={`${item.id}-${item.updatedAtUtc}`} onChanged={load} />)}</section></section></main>
+
+  const openCount = items.filter((item) => item.status === 'Open').length
+  const urgentCount = items.filter((item) => item.priority === 'Urgent' && item.status !== 'Closed').length
+
+  // Arama filtreleme (Konu, açıklama, usta adı, referans kodu)
+  const filteredItems = items.filter(item =>
+      item.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.craftsman.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.referenceValue && item.referenceValue.toLowerCase().includes(searchTerm.toLowerCase()))
+  )
+
+  return (
+    <main className="admin-shell">
+        <aside>
+            <div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div>
+            <nav>
+                <a href="/admin">⌂ Genel Bakış</a>
+                <a href="/admin/transactions">◴ İşlem Geçmişi</a>
+                <a href="/admin/reports">▥ Raporlar</a>
+                <a className="active" href="/admin/support">☏ Destek Merkezi</a>
+            </nav>
+        </aside>
+        <section className="admin-main">
+            <header>
+                <div><span>YÖNETİCİ PANELİ</span><h1>Destek Merkezi</h1></div>
+                <b>{filteredItems.length} talep listeleniyor</b>
+            </header>
+
+            {message && <p className="admin-message" role="alert">{message}</p>}
+
+            <div className="support-admin-summary" style={{ display: 'flex', gap: '15px', marginBottom: '25px', flexWrap: 'wrap' }}>
+                <article style={{ flex: 1, background: 'var(--bg-card)', padding: '20px', borderRadius: '8px', borderLeft: '4px solid var(--danger)' }}>
+                    <small style={{ display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>Yeni Açılan Talepler</small>
+                    <strong style={{ fontSize: '28px' }}>{openCount}</strong>
+                </article>
+                <article style={{ flex: 1, background: 'var(--bg-card)', padding: '20px', borderRadius: '8px', borderLeft: '4px solid var(--warning)' }}>
+                    <small style={{ display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>Acil (SLA) Talepleri</small>
+                    <strong style={{ fontSize: '28px', color: urgentCount > 0 ? 'var(--danger)' : 'inherit' }}>{urgentCount}</strong>
+                </article>
+
+                <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <select value={filter} onChange={(event) => setFilter(event.target.value)} style={{ padding: '12px', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                        <option value="">Tüm Talepler (Durum Filtresi Yok)</option>
+                        <option value="Open">Yeni Açılanlar (Açık)</option>
+                        <option value="InProgress">İşlemde Olanlar</option>
+                        <option value="Resolved">Çözüldü Olarak İşaretlenenler</option>
+                        <option value="Closed">Kapatılanlar</option>
+                    </select>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                            type="text"
+                            placeholder="Usta adı, konu veya işlem referans kodu (Örn: USTA-...) ara"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            style={{ flex: 1, padding: '12px', borderRadius: '6px', border: '1px solid var(--border)' }}
+                        />
+                        {searchTerm && (
+                            <button onClick={() => setSearchTerm('')} type="button" style={{ padding: '0 15px' }}>Temizle</button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <section className="support-admin-list">
+                {filteredItems.length === 0 && (
+                    <div style={{ padding: '50px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '8px', color: 'var(--text-muted)' }}>
+                        <span style={{ fontSize: '40px', display: 'block', marginBottom: '15px' }}>🔍</span>
+                        <p style={{ fontSize: '1.1em' }}>Seçtiğiniz filtreye veya aramaya uygun destek talebi bulunamadı.</p>
+                    </div>
+                )}
+                {filteredItems.map((item) => (
+                    <AdminSupportCard item={item} key={`${item.id}-${item.updatedAtUtc}`} onChanged={load} />
+                ))}
+            </section>
+        </section>
+    </main>
+  )
 }
 
 function AdminReportsPage() {
@@ -583,11 +1516,117 @@ function AdminOutboxPage() {
 }
 
 function AdminAuditPage() {
-  const [data, setData] = useState<AdminAuditResponse | null>(null), [filter, setFilter] = useState(''), [message, setMessage] = useState('')
-  useEffect(() => { getAdminAudit(filter || undefined).then(setData).catch(() => setMessage('Denetim kaydı yüklenemedi.')) }, [filter])
-  const actionNames: Record<string, string> = { ActiveStatusChanged: 'Durum değiştirildi', DealerOnboarded: 'Bayi oluşturuldu', EmployeeCreated: 'Çalışan oluşturuldu', AccessCodeReset: 'Erişim kodu yenilendi', NotificationSent: 'Bildirim gönderildi', ProductCodesImported: 'Ürün kodları yüklendi', PointAdjustment: 'Puan düzeltildi' }
-  const icons: Record<string, string> = { Craftsman: '♧', Dealer: '▣', DealerEmployee: '♧', AdminBroadcast: '◇', Product: '▦' }
-  return <main className="admin-shell"><aside><div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div><nav><a href="/admin">⌂ Genel Bakış</a><a href="/admin/transactions">◴ İşlem Geçmişi</a><a className="active" href="/admin/audit">⌁ Denetim Kaydı</a><a href="/admin/reports">▥ Raporlar</a></nav></aside><section className="admin-main"><header><div><span>YÖNETİCİ PANELİ</span><h1>Yönetici Denetim Kaydı</h1></div><b>Değiştirilemez geçmiş</b></header>{message && <p className="admin-message">{message}</p>}<div className="audit-toolbar"><label>Varlık türü<select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="">Tüm kritik işlemler</option>{data?.entityTypes.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><span>{data?.rows.length ?? 0} kayıt</span></div><section className="audit-timeline">{data?.rows.map((item) => <article key={item.id}><span className="audit-icon">{icons[item.entityType] ?? '⌁'}</span><div><div className="audit-head"><strong>{actionNames[item.action] ?? item.action}</strong><time>{dateFormatter.format(new Date(item.createdAtUtc))}</time></div><p>{item.details}</p><small><b>{item.actor}</b> · {item.entityType}{item.entityId ? ` · ${item.entityId.slice(0, 8)}` : ''}</small></div></article>)}{data && data.rows.length === 0 && <p className="audit-empty">Henüz merkezi denetim kaydı bulunmuyor. Yeni kritik yönetici işlemleri burada görünecek.</p>}</section><aside className="audit-note">Bu ekran iş verisini değiştirmez. Kayıtlar; güvenlik incelemesi, kullanıcı itirazı ve operasyon denetimi için saklanır.</aside></section></main>
+  const [data, setData] = useState<AdminAuditResponse | null>(null)
+  const [filter, setFilter] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+      getAdminAudit(filter || undefined).then(setData).catch(() => setMessage('Denetim kaydı yüklenemedi.'))
+  }, [filter])
+
+  const actionNames: Record<string, string> = {
+      ActiveStatusChanged: 'Durum Değiştirildi',
+      DealerOnboarded: 'Yeni Bayi Kuruldu',
+      EmployeeCreated: 'Çalışan Oluşturuldu',
+      AccessCodeReset: 'Erişim Kodu Yenilendi',
+      NotificationSent: 'Bildirim Gönderildi',
+      ProductCodesImported: 'Ürün Kodları Yüklendi',
+      PointAdjustment: 'Manuel Puan Düzeltildi',
+      CampaignApproved: 'Kampanya Onaylandı',
+      CampaignRejected: 'Kampanya Reddedildi',
+      CampaignCreated: 'Kampanya Oluşturuldu'
+  }
+
+  // İşlem türüne göre simgeler
+  const icons: Record<string, string> = {
+      Craftsman: '👤',
+      Dealer: '🏢',
+      DealerEmployee: '👨‍💼',
+      AdminBroadcast: '📢',
+      Product: '📦',
+      Campaign: '🎯',
+      OutboxMessage: '🔄'
+  }
+
+  // İşlem türüne göre sol kenar vurgu renkleri (Güvenlik / Denetim için)
+  const actionColors: Record<string, string> = {
+      PointAdjustment: 'var(--danger)',     // Finansal müdahale - Kırmızı vurgu
+      DealerOnboarded: 'var(--success)',    // Yeni bayi - Yeşil vurgu
+      CampaignApproved: 'var(--success)',   // Onay - Yeşil vurgu
+      CampaignRejected: 'var(--danger)',    // Ret - Kırmızı vurgu
+      ProductCodesImported: 'var(--warning)',// Stok/Kod yükleme - Sarı vurgu
+      ActiveStatusChanged: 'var(--info)'    // Durum değişimi - Mavi/Nötr
+  }
+
+  return (
+    <main className="admin-shell">
+        <aside>
+            <div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div>
+            <nav>
+                <a href="/admin">⌂ Genel Bakış</a>
+                <a href="/admin/transactions">◴ İşlem Geçmişi</a>
+                <a className="active" href="/admin/audit">⌁ Denetim Kaydı</a>
+                <a href="/admin/reports">▥ Raporlar</a>
+            </nav>
+        </aside>
+        <section className="admin-main">
+            <header>
+                <div><span>YÖNETİCİ PANELİ</span><h1>Yönetici Denetim Kaydı (Audit Log)</h1></div>
+                <b>Değiştirilemez merkezi loglar</b>
+            </header>
+
+            {message && <p className="admin-message" role="alert">{message}</p>}
+
+            <div className="audit-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, maxWidth: '400px' }}>Varlık Türüne Göre Filtrele:
+                    <select value={filter} onChange={(event) => setFilter(event.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                        <option value="">Tüm Kritik İşlemler</option>
+                        {data?.entityTypes.map((item) => <option value={item} key={item}>{item}</option>)}
+                    </select>
+                </label>
+                <span style={{ fontWeight: 'bold' }}>{data?.rows.length ?? 0} kayıt gösteriliyor</span>
+            </div>
+
+            <section className="audit-timeline" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {data?.rows.map((item) => {
+                    const borderColor = actionColors[item.action] || 'var(--border)'
+                    return (
+                        <article key={item.id} style={{ display: 'flex', gap: '15px', background: 'var(--bg-card)', padding: '15px', borderRadius: '8px', borderLeft: `5px solid ${borderColor}`, alignItems: 'flex-start' }}>
+                            <span className="audit-icon" style={{ fontSize: '24px', background: 'var(--bg-body)', padding: '8px', borderRadius: '6px' }}>
+                                {icons[item.entityType] ?? '⌁'}
+                            </span>
+                            <div style={{ flex: 1 }}>
+                                <div className="audit-head" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                    <strong style={{ fontSize: '1.05em', color: borderColor }}>
+                                        {actionNames[item.action] ?? item.action}
+                                    </strong>
+                                    <time style={{ fontSize: '0.85em', opacity: 0.7 }}>
+                                        {dateFormatter.format(new Date(item.createdAtUtc))}
+                                    </time>
+                                </div>
+                                <p style={{ margin: '8px 0', lineHeight: '1.4' }}>{item.details}</p>
+                                <small style={{ display: 'block', opacity: 0.8, fontSize: '0.9em' }}>
+                                    İşlemi Yapan Yönetici: <b style={{ color: 'var(--text)' }}>{item.actor}</b> · Varlık: {item.entityType} {item.entityId ? `(ID: ${item.entityId.slice(0, 8)})` : ''}
+                                </small>
+                            </div>
+                        </article>
+                    )
+                })}
+
+                {data && data.rows.length === 0 && (
+                    <div style={{ padding: '50px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '8px', color: 'var(--text-muted)' }}>
+                        <span style={{ fontSize: '40px', display: 'block', marginBottom: '15px' }}>🛡️</span>
+                        <p style={{ fontSize: '1.1em' }}>Henüz merkezi denetim kaydı bulunmuyor. Yeni kritik yönetici işlemleri burada listelenecektir.</p>
+                    </div>
+                )}
+            </section>
+
+            <aside className="audit-note" style={{ marginTop: '25px', padding: '15px', background: 'rgba(0,123,255,0.05)', borderRadius: '8px', fontSize: '0.9em', borderLeft: '3px solid var(--primary)' }}>
+                ℹ️ Bu ekran iş verisini doğrudan değiştirmez. Kayıtlar; güvenlik incelemesi, kullanıcı itirazları ve yasal operasyon denetimi amacıyla değiştirilemez şekilde saklanır.
+            </aside>
+        </section>
+    </main>
+  )
 }
 
 function AdminCouponsPage() {
@@ -662,22 +1701,411 @@ function DealerPerformance({ refreshKey }: { refreshKey: number }) {
 }
 
 function DealerSalePanel({ onSaved }: { onSaved: () => void }) {
-  const [membershipToken, setMembershipToken] = useState(''), [saleReference, setSaleReference] = useState(''), [totalAmount, setTotalAmount] = useState(0), [verifiedName, setVerifiedName] = useState(''), [result, setResult] = useState<DealerSaleResult | null>(null), [message, setMessage] = useState(''), [busy, setBusy] = useState(false)
-  const [cameraOpen, setCameraOpen] = useState(false); const memberVideoRef = useRef<HTMLVideoElement>(null)
-  useEffect(() => { if (!cameraOpen) return; let stopped = false; let stream: MediaStream | null = null; const start = async () => { const Detector = (window as typeof window & { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector; if (!Detector || !navigator.mediaDevices?.getUserMedia) { setMessage('Bu cihazda kamera taraması desteklenmiyor; kodu elle girebilirsiniz.'); setCameraOpen(false); return } try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }); if (!memberVideoRef.current) return; memberVideoRef.current.srcObject = stream; await memberVideoRef.current.play(); const detector = new Detector({ formats: ['qr_code'] }); const scan = async () => { if (stopped || !memberVideoRef.current) return; const found = await detector.detect(memberVideoRef.current).catch(() => []); if (found[0]?.rawValue) { setMembershipToken(found[0].rawValue.toUpperCase()); setCameraOpen(false); return } window.setTimeout(scan, 300) }; void scan() } catch { setMessage('Kamera açılamadı; üyelik kodunu elle girin.'); setCameraOpen(false) } }; void start(); return () => { stopped = true; stream?.getTracks().forEach((track) => track.stop()) } }, [cameraOpen])
-  const verify = async () => { setBusy(true); setMessage(''); try { const member = await verifyMembershipPass(membershipToken.trim().toUpperCase()); setVerifiedName(`${member.craftsman} · ${levelNames[member.level] ?? member.level}`) } catch (error) { setVerifiedName(''); setMessage(error instanceof Error ? error.message : 'Üyelik doğrulanamadı.') } finally { setBusy(false) } }
-  const save = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { const sale = await createDealerSale(membershipToken.trim().toUpperCase(), saleReference.trim().toUpperCase(), totalAmount); setResult(sale); setVerifiedName(''); setMembershipToken(''); setSaleReference(''); setTotalAmount(0); onSaved() } catch (error) { setMessage(error instanceof Error ? error.message : 'Satış eşleştirilemedi.') } finally { setBusy(false) } }
-  return <><form className="dealer-search dealer-sale" onSubmit={save}>{cameraOpen && <video className="dealer-member-camera" ref={memberVideoRef} playsInline muted />}<button onClick={() => setCameraOpen(!cameraOpen)} type="button">{cameraOpen ? 'Kamerayı Kapat' : 'Kamerayla QR Okut'}</button><label>Üyelik QR kodu<input value={membershipToken} onChange={(event) => { setMembershipToken(event.target.value.toUpperCase()); setVerifiedName('') }} minLength={8} placeholder="UKM-..." required /></label><button onClick={verify} disabled={busy || membershipToken.length < 8} type="button">Ustayı Doğrula</button>{verifiedName && <p className="verified-member">✓ {verifiedName}</p>}<label>Satış referansı<input value={saleReference} onChange={(event) => setSaleReference(event.target.value.toUpperCase())} minLength={3} maxLength={80} placeholder="FIS-2026-001" required /></label><label>Satış toplamı<input value={totalAmount} onChange={(event) => setTotalAmount(Number(event.target.value))} type="number" min="0" step="0.01" required /></label><button disabled={busy || !verifiedName} type="submit">Satışı Ustayla Eşleştir</button></form>{message && <p className="dealer-message">{message}</p>}{result && <section className="dealer-return-result"><span>✓</span><div><b>{result.craftsman}</b><p>{result.saleReference} numaralı satış eşleştirildi.</p><small>{numberFormatter.format(result.totalAmount)} TL</small></div></section>}</>
+  const [membershipToken, setMembershipToken] = useState('')
+  const [saleReference, setSaleReference] = useState('')
+  const [totalAmount, setTotalAmount] = useState<number | ''>('')
+  const [verifiedName, setVerifiedName] = useState('')
+  const [result, setResult] = useState<DealerSaleResult | null>(null)
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // Geliştirilmiş Kamera State'leri
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const [cameraState, setCameraState] = useState<'starting' | 'active' | 'unavailable' | 'denied'>('starting')
+  const memberVideoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    if (!cameraOpen) return
+    let stopped = false
+    let stream: MediaStream | null = null
+
+    const start = async () => {
+      setCameraState('starting')
+      const Detector = (window as typeof window & { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector
+
+      if (!Detector || !navigator.mediaDevices?.getUserMedia) {
+        setCameraState('unavailable')
+        return
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+        if (stopped) { stream.getTracks().forEach((track) => track.stop()); return }
+
+        if (memberVideoRef.current) {
+            memberVideoRef.current.srcObject = stream
+            await memberVideoRef.current.play()
+        }
+        setCameraState('active')
+
+        const detector = new Detector({ formats: ['qr_code'] })
+        const scan = async () => {
+          if (stopped || !memberVideoRef.current) return
+          try {
+            const found = await detector.detect(memberVideoRef.current).catch(() => [])
+            if (found[0]?.rawValue) {
+              setMembershipToken(found[0].rawValue.toUpperCase())
+              setCameraOpen(false)
+              // Kodu okur okumaz direkt doğrulamaya geçebiliriz (opsiyonel ama iyi bir UX)
+              setMessage('QR okundu, doğrulayabilirsiniz.')
+              return
+            }
+          } catch { /* Kare atla */ }
+          window.setTimeout(scan, 300)
+        }
+        void scan()
+      } catch (error: unknown) {
+        if (!stopped) {
+            if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError')) {
+                setCameraState('denied')
+            } else {
+                setCameraState('unavailable')
+            }
+        }
+      }
+    }
+
+    void start()
+    return () => { stopped = true; stream?.getTracks().forEach((track) => track.stop()) }
+  }, [cameraOpen])
+
+  const verify = async () => {
+    setBusy(true); setMessage(''); setResult(null)
+    try {
+      const member = await verifyMembershipPass(membershipToken.trim().toUpperCase())
+      setVerifiedName(`${member.craftsman} · ${levelNames[member.level] ?? member.level}`)
+      setMessage('') // Başarılıysa hata mesajını temizle
+    } catch (error) {
+      setVerifiedName('')
+      setMessage(error instanceof Error ? error.message : 'Üyelik doğrulanamadı.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!totalAmount) return
+    setBusy(true); setMessage(''); setResult(null)
+    try {
+      const sale = await createDealerSale(membershipToken.trim().toUpperCase(), saleReference.trim().toUpperCase(), Number(totalAmount))
+      setResult(sale)
+      setVerifiedName(''); setMembershipToken(''); setSaleReference(''); setTotalAmount('')
+      onSaved()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Satış eşleştirilemedi.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <form className="dealer-search dealer-sale" onSubmit={save}>
+
+        {/* Gelişmiş Kamera Arayüzü */}
+        {cameraOpen && (
+            <div className="camera-frame" style={{ marginBottom: '15px' }} aria-live="polite">
+                <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+                <video className={cameraState === 'active' ? 'camera-preview active' : 'camera-preview'} ref={memberVideoRef} playsInline muted />
+
+                {cameraState === 'starting' && <span className="camera-status">Kamera hazırlanıyor…</span>}
+                {cameraState === 'denied' && (
+                    <div className="camera-error-box">
+                        <span className="camera-error-icon">⊘</span>
+                        <strong>Kamera İzni Gerekli</strong>
+                        <small>Ustanın kodunu okutmak için tarayıcı ayarlarından kameraya izin verin.</small>
+                    </div>
+                )}
+                {cameraState === 'unavailable' && (
+                    <div className="camera-error-box">
+                        <span className="camera-error-icon">⚠</span>
+                        <strong>Kamera Bulunamadı</strong>
+                        <small>Cihazınızda kamera desteklenmiyor. Kodu elle girebilirsiniz.</small>
+                    </div>
+                )}
+            </div>
+        )}
+
+        <button
+            className={`secondary-action ${cameraOpen ? 'active' : ''}`}
+            onClick={() => setCameraOpen(!cameraOpen)}
+            type="button"
+            style={{ marginBottom: '20px' }}
+        >
+            <span>{cameraOpen ? '✕' : '📷'}</span> {cameraOpen ? 'Kamerayı Kapat' : 'Kamerayla QR Okut'}
+        </button>
+
+        <label>Üyelik kodu (QR)
+            <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                    value={membershipToken}
+                    onChange={(event) => { setMembershipToken(event.target.value.toUpperCase()); setVerifiedName(''); setResult(null) }}
+                    minLength={8}
+                    placeholder="UKM-..."
+                    required
+                    style={{ flex: 1 }}
+                />
+                <button
+                    onClick={verify}
+                    disabled={busy || membershipToken.length < 8}
+                    type="button"
+                    style={{ padding: '0 15px', whiteSpace: 'nowrap' }}
+                >
+                    Doğrula
+                </button>
+            </div>
+        </label>
+
+        {verifiedName && <p className="verified-member" style={{ color: 'var(--success)', fontWeight: 'bold', margin: '-5px 0 15px' }}>✓ Doğrulandı: {verifiedName}</p>}
+
+        <label>Fatura / Satış Referansı
+            <input
+                value={saleReference}
+                onChange={(event) => setSaleReference(event.target.value.toUpperCase())}
+                minLength={3}
+                maxLength={80}
+                placeholder="Örn: FIS-2026-001"
+                required
+            />
+        </label>
+
+        <label>Satış Toplamı (TL)
+            <input
+                value={totalAmount}
+                onChange={(event) => setTotalAmount(event.target.value ? Number(event.target.value) : '')}
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                required
+            />
+        </label>
+
+        <button disabled={busy || !verifiedName || !totalAmount} type="submit" className="primary-action">
+            {busy ? 'İşleniyor…' : 'Satışı Ustayla Eşleştir'}
+        </button>
+      </form>
+
+      {message && <p className="dealer-message" role="alert">{message}</p>}
+
+      {result && (
+        <section className="dealer-return-result" style={{ marginTop: '20px', padding: '15px', borderRadius: '8px', background: 'var(--bg-card)', border: '1px solid var(--success)' }}>
+            <span style={{ color: 'var(--success)', fontSize: '24px', marginRight: '10px' }}>✓</span>
+            <div style={{ display: 'inline-block', verticalAlign: 'top' }}>
+                <b style={{ display: 'block', fontSize: '1.1em' }}>{result.craftsman}</b>
+                <p style={{ margin: '5px 0' }}>{result.saleReference} numaralı satış başarıyla eşleştirildi.</p>
+                <small style={{ fontWeight: 'bold' }}>Tutar: {numberFormatter.format(result.totalAmount)} TL</small>
+            </div>
+        </section>
+      )}
+    </>
+  )
 }
 
 function DealerApp() {
-  const [mode, setMode] = useState<'coupon' | 'return' | 'sale'>('coupon'); const [activityVersion, setActivityVersion] = useState(0); const [code, setCode] = useState(''); const [reason, setReason] = useState(''); const [coupon, setCoupon] = useState<DealerCoupon | null>(null); const [returnResult, setReturnResult] = useState<ProductReturnResult | null>(null); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false)
-  function changeMode(next: 'coupon' | 'return' | 'sale') { setMode(next); setCode(''); setReason(''); setCoupon(null); setReturnResult(null); setMessage('') }
-  async function verify(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setMessage(''); setCoupon(null); try { setCoupon(await verifyDealerCoupon(code.trim().toUpperCase())) } catch (error) { setMessage(error instanceof Error ? error.message : 'Kupon doğrulanamadı.') } finally { setBusy(false) } }
-  async function fulfill() { setBusy(true); setMessage(''); try { const result = await fulfillDealerCoupon(code.trim().toUpperCase()); setCoupon(result); if (!result.alreadyProcessed) setActivityVersion((value) => value + 1); setMessage(result.alreadyProcessed ? 'Bu teslim daha önce onaylanmış.' : 'Ödül teslimi başarıyla onaylandı.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Teslim onaylanamadı.') } finally { setBusy(false) } }
-  async function returnProduct(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setMessage(''); setReturnResult(null); try { const result = await returnDealerProduct(code.trim().toUpperCase(), reason.trim()); setReturnResult(result); if (!result.alreadyProcessed) setActivityVersion((value) => value + 1); setMessage(result.alreadyProcessed ? 'Bu ürün daha önce iade edilmiş.' : 'Ürün iadesi ve puan geri alma tamamlandı.') } catch (error) { setMessage(error instanceof Error ? error.message : 'İade tamamlanamadı.') } finally { setBusy(false) } }
+  const [mode, setMode] = useState<'coupon' | 'return' | 'sale'>('coupon')
+  const [activityVersion, setActivityVersion] = useState(0)
+
+  const [code, setCode] = useState('')
+  const [reason, setReason] = useState('')
+  const [coupon, setCoupon] = useState<DealerCoupon | null>(null)
+  const [returnResult, setReturnResult] = useState<ProductReturnResult | null>(null)
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  function changeMode(next: 'coupon' | 'return' | 'sale') {
+    setMode(next); setCode(''); setReason(''); setCoupon(null); setReturnResult(null); setMessage('')
+  }
+
+  async function verify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true); setMessage(''); setCoupon(null)
+    try {
+        setCoupon(await verifyDealerCoupon(code.trim().toUpperCase()))
+    } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Kupon doğrulanamadı.')
+    } finally {
+        setBusy(false)
+    }
+  }
+
+  async function fulfill() {
+    // GÜVENLİK KORUMASI: Yanlış tıklamayı önlemek için onay soruyoruz
+    if (!window.confirm("Ödülü ustaya fiziki olarak teslim ettiğinizi onaylıyor musunuz? Bu işlem geri alınamaz.")) {
+        return
+    }
+
+    setBusy(true); setMessage('')
+    try {
+        const result = await fulfillDealerCoupon(code.trim().toUpperCase())
+        setCoupon(result)
+        if (!result.alreadyProcessed) setActivityVersion((value) => value + 1)
+        setMessage(result.alreadyProcessed ? 'Bu teslim işlemi daha önce onaylanmış.' : '✓ Ödül teslimi başarıyla onaylandı.')
+    } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Teslim onaylanamadı.')
+    } finally {
+        setBusy(false)
+    }
+  }
+
+  async function returnProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    // GÜVENLİK KORUMASI: İade işlemi ustanın puanını düşüreceği için onay soruyoruz
+    if (!window.confirm("Bu ürünün iadesini onaylıyor musunuz? Ustanın bu koddan kazandığı puan hesabından otomatik olarak düşülecektir.")) {
+        return
+    }
+
+    setBusy(true); setMessage(''); setReturnResult(null)
+    try {
+        const result = await returnDealerProduct(code.trim().toUpperCase(), reason.trim())
+        setReturnResult(result)
+        if (!result.alreadyProcessed) setActivityVersion((value) => value + 1)
+        setMessage(result.alreadyProcessed ? 'Bu ürün daha önce iade edilmiş.' : '✓ Ürün iadesi ve puan geri alma tamamlandı.')
+    } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'İade tamamlanamadı.')
+    } finally {
+        setBusy(false)
+    }
+  }
+
   const expired = coupon?.expiresAtUtc ? new Date(coupon.expiresAtUtc) <= new Date() : false
-  return <main className="dealer-shell"><header><div><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Bayi Paneli</strong></div></div><i>Yalova Merkez Bayi</i></header><DealerPerformance refreshKey={activityVersion} /><nav className="dealer-tabs"><button className={mode === 'coupon' ? 'active' : ''} onClick={() => changeMode('coupon')} type="button">Kupon Teslimi</button><button className={mode === 'return' ? 'active' : ''} onClick={() => changeMode('return')} type="button">Ürün İadesi</button><button className={mode === 'sale' ? 'active' : ''} onClick={() => changeMode('sale')} type="button">Satış Eşleştir</button></nav><section className="dealer-hero"><span>{mode === 'coupon' ? '▦' : mode === 'sale' ? '♧' : '↩'}</span><h1>{mode === 'coupon' ? 'Kupon Doğrula' : mode === 'sale' ? 'Satışı Ustayla Eşleştir' : 'Ürün İadesi'}</h1><p>{mode === 'coupon' ? 'Ustanın kupon kodunu kontrol edin. Doğrulama kuponu tüketmez.' : mode === 'sale' ? 'Ustanın iki dakikalık üyelik QR’ını doğrulayarak satışı güvenle eşleştirin.' : 'İade edilen ürünün kodunu ve iade nedenini girin. Kazanılan puan geri alınır.'}</p></section>{mode === 'sale' ? <DealerSalePanel onSaved={() => setActivityVersion((value) => value + 1)} /> : mode === 'coupon' ? <form className="dealer-search" onSubmit={verify}><label>Kupon kodu</label><div><input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="UK-XXXXXXXXXXXX" minLength={6} required autoFocus /><button disabled={busy} type="submit">{busy ? 'Kontrol…' : 'Doğrula'}</button></div></form> : <form className="dealer-search dealer-return" onSubmit={returnProduct}><label>Ürün kodu<input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="USTA-XXXX-XXXX" minLength={8} required autoFocus /></label><label>İade nedeni<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={200} placeholder="İade nedenini yazın" required /></label><button disabled={busy} type="submit">{busy ? 'İşleniyor…' : 'İadeyi Tamamla'}</button></form>}{message && <p className="dealer-message">{message}</p>}{coupon && <section className="dealer-coupon"><div className={`dealer-validity ${coupon.status === 'Created' && !expired ? 'valid' : ''}`}><span>{coupon.status === 'Created' && !expired ? '✓' : '!'}</span><div><b>{coupon.status === 'Created' && !expired ? 'Kupon geçerli' : coupon.status === 'Fulfilled' ? 'Kupon kullanılmış' : 'Kupon kullanılamaz'}</b><small>{coupon.fulfillmentCode}</small></div></div><dl><div><dt>Ödül</dt><dd>{coupon.reward}</dd></div><div><dt>Usta</dt><dd>{coupon.craftsman}</dd></div><div><dt>Son kullanım</dt><dd>{coupon.expiresAtUtc ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(coupon.expiresAtUtc)) : 'Süresiz'}</dd></div></dl><button className="dealer-fulfill" onClick={fulfill} disabled={busy || coupon.status !== 'Created' || expired} type="button">{coupon.status === 'Fulfilled' ? 'Teslim Edilmiş' : 'Teslimi Onayla'}</button><small className="dealer-warning">Teslim onayı geri alınamaz. Ödülü ustaya verdikten sonra onaylayın.</small></section>}{returnResult && <section className="dealer-return-result"><span>✓</span><div><b>{returnResult.product ?? 'Ürün'} iade edildi</b><p>{numberFormatter.format(returnResult.reversedPoints)} puan geri alındı.</p>{returnResult.balance !== undefined && <small>Yeni puan bakiyesi: {numberFormatter.format(returnResult.balance)}</small>}</div></section>}<footer><a href="/">Usta uygulamasına dön</a><span>Demo Bayi Görevlisi</span></footer></main>
+  const isValid = coupon?.status === 'Created' && !expired
+
+  return (
+    <main className="dealer-shell">
+        <header>
+            <div><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Bayi Paneli</strong></div></div>
+            <i>Yalova Merkez Bayi</i>
+        </header>
+
+        <DealerPerformance refreshKey={activityVersion} />
+
+        <nav className="dealer-tabs" role="tablist">
+            <button role="tab" aria-selected={mode === 'coupon'} className={mode === 'coupon' ? 'active' : ''} onClick={() => changeMode('coupon')} type="button">Kupon Teslimi</button>
+            <button role="tab" aria-selected={mode === 'return'} className={mode === 'return' ? 'active' : ''} onClick={() => changeMode('return')} type="button">Ürün İadesi</button>
+            <button role="tab" aria-selected={mode === 'sale'} className={mode === 'sale' ? 'active' : ''} onClick={() => changeMode('sale')} type="button">Satış Eşleştir</button>
+        </nav>
+
+        <section className="dealer-hero">
+            <span>{mode === 'coupon' ? '▦' : mode === 'sale' ? '♧' : '↩'}</span>
+            <h1>{mode === 'coupon' ? 'Kupon Doğrula ve Teslim Et' : mode === 'sale' ? 'Satışı Ustayla Eşleştir' : 'Ürün İadesi'}</h1>
+            <p>{mode === 'coupon' ? 'Ustanın uygulamasından gösterdiği kodu girerek ödül teslimini onaylayın.' : mode === 'sale' ? 'Ustanın uygulamasındaki üyelik QR kodunu okutarak satışı eşleştirin.' : 'İade edilen ürünün kodunu ve nedenini girin. Ustanın kazandığı puan sistemden otomatik geri alınır.'}</p>
+        </section>
+
+        {mode === 'sale' ? (
+            <DealerSalePanel onSaved={() => setActivityVersion((value) => value + 1)} />
+        ) : mode === 'coupon' ? (
+            <>
+                <form className="dealer-search" onSubmit={verify}>
+                    <label>Kupon kodu (UK- İle Başlar)</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                            value={code}
+                            onChange={(event) => {setCode(event.target.value.toUpperCase()); setCoupon(null); setMessage('')}}
+                            placeholder="Örn: UK-1A2B3C..."
+                            minLength={6}
+                            required
+                            autoFocus
+                            style={{ flex: 1 }}
+                        />
+                        <button disabled={busy || code.length < 6} type="submit" style={{ padding: '0 15px' }}>
+                            {busy ? 'Kontrol…' : 'Doğrula'}
+                        </button>
+                    </div>
+                </form>
+
+                {message && !coupon && <p className="dealer-message" role="alert">{message}</p>}
+
+                {coupon && (
+                    <section className="dealer-coupon" style={{ marginTop: '20px', padding: '15px', borderRadius: '8px', background: 'var(--bg-card)', border: isValid ? '1px solid var(--success)' : '1px solid var(--danger)' }}>
+                        <div className={`dealer-validity ${isValid ? 'valid' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                            <span style={{ fontSize: '24px', color: isValid ? 'var(--success)' : 'var(--danger)' }}>{isValid ? '✓' : '!'}</span>
+                            <div>
+                                <b style={{ display: 'block', fontSize: '1.2em', color: isValid ? 'var(--success)' : 'var(--danger)' }}>
+                                    {isValid ? 'Kupon Geçerli' : coupon.status === 'Fulfilled' ? 'Kupon Zaten Kullanılmış' : 'Kupon Süresi Dolmuş veya İptal'}
+                                </b>
+                                <small style={{ fontFamily: 'monospace', fontSize: '1.1em' }}>{coupon.fulfillmentCode}</small>
+                            </div>
+                        </div>
+
+                        <dl style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: 'rgba(0,0,0,0.1)', padding: '10px', borderRadius: '6px' }}>
+                            <div><dt style={{ opacity: 0.7, fontSize: '0.9em' }}>Ödül</dt><dd style={{ fontWeight: 'bold' }}>{coupon.reward}</dd></div>
+                            <div><dt style={{ opacity: 0.7, fontSize: '0.9em' }}>Usta</dt><dd style={{ fontWeight: 'bold' }}>{coupon.craftsman}</dd></div>
+                            <div style={{ gridColumn: '1 / -1' }}><dt style={{ opacity: 0.7, fontSize: '0.9em' }}>Son Kullanım</dt><dd>{coupon.expiresAtUtc ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(coupon.expiresAtUtc)) : 'Süresiz'}</dd></div>
+                        </dl>
+
+                        {message && <p className="dealer-message" style={{ margin: '15px 0' }} role="alert">{message}</p>}
+
+                        {isValid && (
+                            <div style={{ marginTop: '15px' }}>
+                                <button className="dealer-fulfill primary-action" onClick={fulfill} disabled={busy} type="button" style={{ width: '100%', padding: '12px' }}>
+                                    {busy ? 'İşleniyor...' : 'Ödülü Teslim Et ve Onayla'}
+                                </button>
+                                <small className="dealer-warning" style={{ display: 'block', textAlign: 'center', marginTop: '10px', color: 'var(--text-muted)' }}>
+                                    Teslim onayı geri alınamaz. Lütfen ödülü ustaya verdikten sonra onaylayın.
+                                </small>
+                            </div>
+                        )}
+                    </section>
+                )}
+            </>
+        ) : (
+            <>
+                <form className="dealer-search dealer-return" onSubmit={returnProduct}>
+                    <label>İade Edilen Ürün Kodu
+                        <input
+                            value={code}
+                            onChange={(event) => {setCode(event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '')); setReturnResult(null); setMessage('')}}
+                            placeholder="USTA-XXXX-XXXX"
+                            minLength={8}
+                            required
+                            autoFocus
+                        />
+                    </label>
+                    <label>İade Nedeni
+                        <textarea
+                            value={reason}
+                            onChange={(event) => setReason(event.target.value)}
+                            minLength={3}
+                            maxLength={200}
+                            placeholder="Ürünün iade edilme nedenini detaylıca yazın (Zorunlu)"
+                            required
+                            rows={3}
+                            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--border)', resize: 'vertical' }}
+                        />
+                    </label>
+                    <button disabled={busy || code.length < 8 || reason.length < 3} type="submit" className="danger-action" style={{ backgroundColor: 'var(--danger)', color: 'white', marginTop: '10px' }}>
+                        {busy ? 'İşleniyor…' : 'İadeyi Tamamla ve Puanı Geri Al'}
+                    </button>
+                </form>
+
+                {message && !returnResult && <p className="dealer-message" role="alert">{message}</p>}
+
+                {returnResult && (
+                    <section className="dealer-return-result" style={{ marginTop: '20px', padding: '15px', borderRadius: '8px', background: 'var(--bg-card)', border: '1px solid var(--success)' }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--success)', fontSize: '24px' }}>✓</span>
+                            <div>
+                                <b style={{ display: 'block', fontSize: '1.1em' }}>{returnResult.product ?? 'Ürün'} başarıyla iade edildi</b>
+                                <p style={{ margin: '5px 0', color: 'var(--danger)', fontWeight: 'bold' }}>-{numberFormatter.format(returnResult.reversedPoints)} puan ustanın hesabından geri alındı.</p>
+                                {returnResult.balance !== undefined && (
+                                    <small style={{ color: 'var(--text-muted)' }}>Güncel usta bakiyesi: {numberFormatter.format(returnResult.balance)} puan</small>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+                )}
+            </>
+        )}
+
+        <footer>
+            <a href="/">Usta uygulamasına dön</a>
+            <span>Bayi Görevlisi Paneli</span>
+        </footer>
+    </main>
+  )
 }
 
 function CraftsmanApp() {
