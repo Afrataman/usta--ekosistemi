@@ -13,6 +13,7 @@
 
 # JavaScript / PWA
 node_modules/
+backups/
 dist/
 .vite/
 coverage/

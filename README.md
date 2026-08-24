@@ -34,6 +34,14 @@ Sağlık kontrolü `/api/health` adresindedir. SQL Server tabloları sonraki aş
 Entity Framework Core migration dosyalarıyla oluşturulur; SSMS'de elle tablo
 oluşturulmamalıdır. Yerel geliştirme veritabanı `UstaEkosistemiDev` adındadır.
 
+Yerel veritabanı yedeği almak için PowerShell'de proje klasöründe şu komutu çalıştırın:
+
+```powershell
+.\scripts\backup-local-database.ps1
+```
+
+Yedekler yalnızca bu bilgisayarda `backups` klasörüne `.bak` olarak kaydedilir ve GitHub'a gönderilmez.
+
 ## Neden önce belge hazırlıyoruz?
 
 Puan, kupon, iade ve bayi işlemleri birbirini etkileyen finansal değere sahip işlemlerdir.
