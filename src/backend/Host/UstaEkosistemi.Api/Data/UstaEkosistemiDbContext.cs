@@ -32,6 +32,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<DealerSale> DealerSales => Set<DealerSale>();
     public DbSet<CraftsmanNotification> CraftsmanNotifications => Set<CraftsmanNotification>();
     public DbSet<CraftsmanSession> CraftsmanSessions => Set<CraftsmanSession>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -224,6 +225,10 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         modelBuilder.Entity<CraftsmanSession>(entity =>
         {
             entity.ToTable("CraftsmanSessions"); entity.HasKey(x => x.Id); entity.Property(x => x.TokenHash).HasMaxLength(64).IsFixedLength().IsRequired(); entity.HasIndex(x => x.TokenHash).IsUnique(); entity.HasIndex(x => new { x.CraftsmanId, x.ExpiresAtUtc }); entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<OutboxMessage>(entity =>
+        {
+            entity.ToTable("OutboxMessages"); entity.HasKey(x => x.Id); entity.Property(x => x.Type).HasMaxLength(80).IsRequired(); entity.Property(x => x.Payload).IsRequired(); entity.Property(x => x.DeduplicationKey).HasMaxLength(240).IsRequired(); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20); entity.Property(x => x.LastError).HasMaxLength(1000); entity.HasIndex(x => x.DeduplicationKey).IsUnique(); entity.HasIndex(x => new { x.Status, x.NextAttemptAtUtc });
         });
     }
 }

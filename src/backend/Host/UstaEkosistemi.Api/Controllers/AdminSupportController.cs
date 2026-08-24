@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
+using UstaEkosistemi.Api.ReliableDelivery;
 
 namespace UstaEkosistemi.Api.Controllers;
 
@@ -42,7 +43,7 @@ public sealed class AdminSupportController(UstaEkosistemiDbContext dbContext) : 
         var response = new SupportResponse { SupportRequestId = id, Author = "Demo Destek", Message = request.Message.Trim() };
         item.Status = SupportRequestStatus.InProgress; item.AssignedTo ??= response.Author; item.UpdatedAtUtc = response.CreatedAtUtc;
         dbContext.SupportResponses.Add(response);
-        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = item.CraftsmanId, Type = "Support", Title = "Destek talebiniz yanıtlandı", Message = $"{item.Subject} başlıklı talebinize yeni yanıt geldi.", ReferenceType = nameof(SupportRequest), ReferenceId = item.Id });
+        dbContext.QueueCraftsmanNotification(item.CraftsmanId, "Support", "Destek talebiniz yanıtlandı", $"{item.Subject} başlıklı talebinize yeni yanıt geldi.", nameof(SupportRequest), item.Id);
         await dbContext.SaveChangesAsync(token);
         return Created($"/api/admin/support-requests/{id}/responses/{response.Id}", new { response.Id, response.Author, response.Message, response.CreatedAtUtc });
     }

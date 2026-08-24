@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Security;
+using UstaEkosistemi.Api.ReliableDelivery;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -17,6 +18,7 @@ builder.Services.AddCors(options => options.AddPolicy("DevelopmentPwa", policy =
 builder.Services.AddDbContext<UstaEkosistemiDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("UstaEkosistemi")));
 builder.Services.AddScoped<DealerSessionAuthenticator>();
+builder.Services.AddHostedService<OutboxDispatcher>();
 
 var app = builder.Build();
 

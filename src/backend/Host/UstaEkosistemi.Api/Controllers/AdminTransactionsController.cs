@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
 using UstaEkosistemi.Api.Security;
+using UstaEkosistemi.Api.ReliableDelivery;
 
 namespace UstaEkosistemi.Api.Controllers;
 
@@ -36,15 +37,7 @@ public sealed class AdminTransactionsController(UstaEkosistemiDbContext dbContex
             ReferenceId = adjustmentId,
             Description = $"Yetkili düzeltme · {reason} · {actor}"
         });
-        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification
-        {
-            CraftsmanId = craftsman.Id,
-            Type = "PointsEarned",
-            Title = "Puan düzeltmesi yapıldı",
-            Message = $"Hesabınıza {(request.Amount > 0 ? "+" : string.Empty)}{request.Amount:N0} puan düzeltmesi uygulandı. Neden: {reason}",
-            ReferenceType = "AdminAdjustment",
-            ReferenceId = adjustmentId
-        });
+        dbContext.QueueCraftsmanNotification(craftsman.Id, "PointsEarned", "Puan düzeltmesi yapıldı", $"Hesabınıza {(request.Amount > 0 ? "+" : string.Empty)}{request.Amount:N0} puan düzeltmesi uygulandı. Neden: {reason}", "AdminAdjustment", adjustmentId);
         dbContext.AddAdminAudit(HttpContext, "PointAdjustment", nameof(Craftsman), craftsman.Id, $"Usta={craftsman.FullName}; miktar={request.Amount}; gerekçe={reason}");
         await dbContext.SaveChangesAsync(token);
         var balance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == craftsman.Id).SumAsync(x => (int?)x.Amount, token) ?? 0;

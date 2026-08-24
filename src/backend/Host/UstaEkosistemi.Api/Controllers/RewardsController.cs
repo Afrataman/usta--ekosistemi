@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
 using UstaEkosistemi.Api.Security;
+using UstaEkosistemi.Api.ReliableDelivery;
 
 namespace UstaEkosistemi.Api.Controllers;
 
@@ -110,7 +111,7 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
             Description = $"{reward.Name} ödülü"
         });
         var deliveryMessage = reward.DeliveryType == RewardDeliveryType.Digital ? "Dijital ödül kodunuz anında teslim edildi ve Kuponlar ekranına kaydedildi." : "Bayiden teslim kodunuz Kuponlar ekranında hazır.";
-        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = request.CraftsmanId, Type = "Reward", Title = "Ödülünüz hazır", Message = $"{reward.Name} için {reward.PointCost:N0} puan kullanıldı. {deliveryMessage}", ReferenceType = nameof(RewardRedemption), ReferenceId = redemption.Id });
+        dbContext.QueueCraftsmanNotification(request.CraftsmanId, "Reward", "Ödülünüz hazır", $"{reward.Name} için {reward.PointCost:N0} puan kullanıldı. {deliveryMessage}", nameof(RewardRedemption), redemption.Id);
         if (reward.StockQuantity.HasValue)
         {
             reward.StockQuantity--;

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
+using UstaEkosistemi.Api.ReliableDelivery;
 
 namespace UstaEkosistemi.Api.Controllers;
 
@@ -42,7 +43,7 @@ public sealed class AdminCampaignsController(UstaEkosistemiDbContext dbContext) 
     private async Task AddCampaignNotifications(Campaign campaign, CancellationToken token)
     {
         var craftsmanIds = await dbContext.Craftsmen.Where(x => x.IsActive && x.CampaignNotificationsEnabled).Select(x => x.Id).ToListAsync(token);
-        dbContext.CraftsmanNotifications.AddRange(craftsmanIds.Select(id => new CraftsmanNotification { CraftsmanId = id, Type = "Campaign", Title = campaign.Title, Message = campaign.Summary, ReferenceType = nameof(Campaign), ReferenceId = campaign.Id }));
+        foreach (var id in craftsmanIds) dbContext.QueueCraftsmanNotification(id, "Campaign", campaign.Title, campaign.Summary, nameof(Campaign), campaign.Id);
     }
 }
 

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
 using UstaEkosistemi.Api.Security;
+using UstaEkosistemi.Api.ReliableDelivery;
 
 namespace UstaEkosistemi.Api.Controllers;
 
@@ -45,7 +46,7 @@ public sealed class AuthController(UstaEkosistemiDbContext dbContext, IWebHostEn
         {
             craftsman = new Craftsman { PhoneNumber = challenge.PhoneNumber, FullName = "Yeni Usta" };
             dbContext.Craftsmen.Add(craftsman);
-            dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = craftsman.Id, Type = "Welcome", Title = "Usta Kulübü'ne hoş geldiniz", Message = "Ürün kodlarını okutarak puan kazanabilir, puanlarınızı program ödüllerinde kullanabilirsiniz." });
+            dbContext.QueueCraftsmanNotification(craftsman.Id, "Welcome", "Usta Kulübü'ne hoş geldiniz", "Ürün kodlarını okutarak puan kazanabilir, puanlarınızı program ödüllerinde kullanabilirsiniz.", nameof(Craftsman), craftsman.Id);
         }
         var rawToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         var session = new CraftsmanSession { CraftsmanId = craftsman.Id, TokenHash = CraftsmanSessionSecurity.HashToken(rawToken), ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30) };

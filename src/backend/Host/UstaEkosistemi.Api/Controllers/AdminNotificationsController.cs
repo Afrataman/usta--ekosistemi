@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
 using UstaEkosistemi.Api.Security;
+using UstaEkosistemi.Api.ReliableDelivery;
 
 namespace UstaEkosistemi.Api.Controllers;
 
@@ -43,7 +44,7 @@ public sealed class AdminNotificationsController(UstaEkosistemiDbContext dbConte
         var recipientIds = await EligibleCraftsmen(request.Level, city).Select(x => x.Id).ToListAsync(token);
         if (recipientIds.Count == 0) return Conflict(new { message = "Seçilen hedefte bildirim almayı kabul etmiş aktif usta bulunamadı." });
         var broadcastId = Guid.NewGuid(); var now = DateTimeOffset.UtcNow;
-        dbContext.CraftsmanNotifications.AddRange(recipientIds.Select(id => new CraftsmanNotification { CraftsmanId = id, Type = "Campaign", Title = title, Message = message, ReferenceType = "AdminBroadcast", ReferenceId = broadcastId, CreatedAtUtc = now }));
+        foreach (var id in recipientIds) dbContext.QueueCraftsmanNotification(id, "Campaign", title, message, "AdminBroadcast", broadcastId);
         dbContext.AddAdminAudit(HttpContext, "NotificationSent", "AdminBroadcast", broadcastId, $"Başlık={title}; alıcı={recipientIds.Count}; seviye={request.Level ?? "Tümü"}; şehir={city ?? "Tümü"}");
         await dbContext.SaveChangesAsync(token);
         return Ok(new { id = broadcastId, recipientCount = recipientIds.Count, title, level = request.Level, city, createdAtUtc = now });

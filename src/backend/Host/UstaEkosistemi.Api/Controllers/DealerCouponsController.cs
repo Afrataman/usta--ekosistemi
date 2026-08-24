@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
+using UstaEkosistemi.Api.ReliableDelivery;
 using UstaEkosistemi.Api.Security;
 
 namespace UstaEkosistemi.Api.Controllers;
@@ -32,7 +33,7 @@ public sealed class DealerCouponsController(UstaEkosistemiDbContext dbContext, D
         if (coupon.Reward.DeliveryType != RewardDeliveryType.DealerPickup) return Conflict(new { message = "Bu ödül bayiden teslim edilemez." });
         if (coupon.ExpiresAtUtc.HasValue && coupon.ExpiresAtUtc <= DateTimeOffset.UtcNow) return Conflict(new { message = "Kuponun süresi dolmuş." });
         coupon.Status = RewardRedemptionStatus.Fulfilled; coupon.FulfilledAtUtc = DateTimeOffset.UtcNow; coupon.FulfilledByDealerEmployeeId = employee.Id;
-        dbContext.CraftsmanNotifications.Add(new CraftsmanNotification { CraftsmanId = coupon.CraftsmanId, Type = "Delivery", Title = "Ödül teslim edildi", Message = $"{coupon.Reward.Name} ödülünüz bayi tarafından teslim edildi.", ReferenceType = nameof(RewardRedemption), ReferenceId = coupon.Id });
+        dbContext.QueueCraftsmanNotification(coupon.CraftsmanId, "Delivery", "Ödül teslim edildi", $"{coupon.Reward.Name} ödülünüz bayi tarafından teslim edildi.", nameof(RewardRedemption), coupon.Id);
         await dbContext.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
         return Ok(ToResult(coupon, false));
     }
