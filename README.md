@@ -28,7 +28,7 @@ PWA, geliştirmede varsayılan olarak `http://localhost:5028` API adresini kulla
 
 ## Canlı pilot kararı
 
-İlk küçük pilot, ücret ödemeden Azure App Service F1 + 20 MB ücretsiz Azure SQL Database katmanında çalışacaktır. Bu katman yalnızca deneme/pilot içindir; kullanım düzenli hâle geldiğinde kesintisiz çalışma ve daha büyük veritabanı için ücretli Azure plana geçilecektir. OTP doğrulaması Netgsm OTP API ile gönderilecektir; API kullanıcı adı, alt kullanıcı şifresi ve onaylı gönderici adı yalnızca canlı ortamın gizli ayarlarında `Sms__NetGsm__UserName`, `Sms__NetGsm__Password` ve `Sms__NetGsm__SenderId` olarak tutulur. İlk pilotta dijital ödül, sistemin ürettiği Usta Kulübü kuponudur; harici hediye kartı sağlayıcısı ikinci aşamadır.
+Proje şu aşamada tamamen ücretsiz ve yerel çalışacaktır: mevcut bilgisayardaki SQL Server Express, ASP.NET Core API ve PWA kullanılacaktır. Azure, Netgsm, alan adı, tünel veya başka ücretli/harici bir hesap açılmayacaktır. Gerçek SMS gönderimi geliştirme modunda yalnızca yerel test kodu ile simüle edilir. İnternete yayınlama, gerçek SMS paketi veya harici dijital ödül sağlayıcısı; proje beğenilip açık onay verilmeden etkinleştirilmeyecektir.
 
 Sağlık kontrolü `/api/health` adresindedir. SQL Server tabloları sonraki aşamada
 Entity Framework Core migration dosyalarıyla oluşturulur; SSMS'de elle tablo
