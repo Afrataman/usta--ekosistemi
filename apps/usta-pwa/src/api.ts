@@ -18,7 +18,7 @@ export type Dashboard = {
   updatedAtUtc: string
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:5028'
+const apiBaseUrl = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:5028' : window.location.origin)
 const craftsmanHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('usta-token') ?? ''}` })
 const craftsmanFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, { ...init, headers: { ...craftsmanHeaders(), ...(init.headers as Record<string, string> | undefined) } })
 const adminHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('admin-token') ?? ''}` })
