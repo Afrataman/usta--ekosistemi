@@ -14,6 +14,19 @@ import { clearPendingRedemptions, enqueueRedemption, getPendingRedemptions, remo
 import QRCode from 'qrcode'
 
 type Screen = 'home' | 'scan' | 'rewards' | 'wallet' | 'coupons' | 'campaigns' | 'notifications' | 'support' | 'profile'
+type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> }
+
+function InstallPrompt() {
+  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const capture = (event: Event) => { event.preventDefault(); setInstallEvent(event as BeforeInstallPromptEvent); setVisible(true) }
+    window.addEventListener('beforeinstallprompt', capture)
+    return () => window.removeEventListener('beforeinstallprompt', capture)
+  }, [])
+  async function install() { if (!installEvent) return; await installEvent.prompt(); const choice = await installEvent.userChoice; setInstallEvent(null); if (choice.outcome === 'accepted') setVisible(false) }
+  return visible && installEvent ? <div className="pwa-install"><span>⚒ Usta Kulübü’nü telefonuna ekle</span><button onClick={() => void install()} type="button">Yükle</button><button aria-label="Kapat" onClick={() => setVisible(false)} type="button">×</button></div> : null
+}
 
 const fallbackRewards: Reward[] = [
   { id: '1', name: 'Takım Çantası', description: '', pointCost: 2_500, imageKey: 'tool-bag', deliveryType: 'DealerPickup', stockQuantity: 40, isAvailable: true },
@@ -706,6 +719,7 @@ function CraftsmanApp() {
 
   return <main className="app-shell">
     <div className="status-bar"><strong>9:41</strong><span>▮▮ ◔ ▰</span></div>
+    <InstallPrompt />
     {!online && <div className="offline-banner">⌁ Çevrimdışısın — kayıtlı bakiye gösteriliyor. Son güncelleme: {dashboard.updatedAtUtc === fallbackDashboard.updatedAtUtc ? 'bilinmiyor' : dateFormatter.format(new Date(dashboard.updatedAtUtc))}</div>}
     {screen === 'home' && <Home go={setScreen} dashboard={dashboard} connected={connected} />}
     {screen === 'scan' && <Scanner back={() => setScreen('home')} craftsmanId={dashboard.craftsmanId} onRedeemed={refreshDashboard} />}
