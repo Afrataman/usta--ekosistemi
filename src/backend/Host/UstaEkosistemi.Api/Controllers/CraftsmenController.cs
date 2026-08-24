@@ -1,14 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using System.Security.Cryptography;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
 using UstaEkosistemi.Api.Loyalty;
+using UstaEkosistemi.Api.ReliableDelivery;
+using UstaEkosistemi.Api.Security;
 
 namespace UstaEkosistemi.Api.Controllers;
 
 [ApiController]
 [Route("api/craftsmen")]
-public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : ControllerBase
+public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext, IWebHostEnvironment environment, IMemoryCache cache) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> Create(CreateCraftsmanRequest request, CancellationToken cancellationToken)
@@ -162,6 +166,48 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : Con
             craftsman.SmsNotificationsEnabled
         });
     }
+
+    [HttpPost("{id:guid}/phone-change/request")]
+    public async Task<IActionResult> RequestPhoneChange(Guid id, PhoneChangeRequest request, CancellationToken cancellationToken)
+    {
+        var phone = NormalizePhone(request.NewPhoneNumber);
+        if (phone is null) return ValidationProblem("Geçerli yeni telefon numarası girin.");
+        var craftsman = await dbContext.Craftsmen.SingleOrDefaultAsync(x => x.Id == id && x.IsActive, cancellationToken);
+        if (craftsman is null) return NotFound(new { message = "Aktif usta bulunamadı." });
+        if (phone == craftsman.PhoneNumber) return Conflict(new { message = "Yeni numara mevcut telefon numaranızla aynı." });
+        if (await dbContext.Craftsmen.AnyAsync(x => x.PhoneNumber == phone, cancellationToken)) return Conflict(new { message = "Bu telefon numarası başka bir hesapta kayıtlı." });
+        var remoteAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var networkKey = $"phone-change-network:{remoteAddress}"; var attempts = cache.Get<int>(networkKey);
+        if (attempts >= 5) return StatusCode(StatusCodes.Status429TooManyRequests, new { message = "Bu bağlantıdan çok fazla telefon değişikliği istendi. 10 dakika sonra tekrar deneyin." });
+        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+        var secured = OtpCodeHasher.Hash(code);
+        var challenge = new OtpChallenge { PhoneNumber = phone, CodeHash = secured.Hash, CodeSalt = secured.Salt, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(3) };
+        dbContext.OtpChallenges.Add(challenge); await dbContext.SaveChangesAsync(cancellationToken); cache.Set(networkKey, attempts + 1, TimeSpan.FromMinutes(10));
+        return Ok(new { challenge.Id, expiresInSeconds = 180, developmentCode = environment.IsDevelopment() ? code : null });
+    }
+
+    [HttpPost("{id:guid}/phone-change/confirm")]
+    public async Task<IActionResult> ConfirmPhoneChange(Guid id, ConfirmPhoneChangeRequest request, CancellationToken cancellationToken)
+    {
+        var challenge = await dbContext.OtpChallenges.SingleOrDefaultAsync(x => x.Id == request.ChallengeId, cancellationToken);
+        if (challenge is null || challenge.UsedAtUtc.HasValue || challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow) return Unauthorized(new { message = "Kodun süresi dolmuş veya geçersiz." });
+        if (challenge.FailedAttempts >= challenge.MaxAttempts) return Unauthorized(new { message = "Deneme sınırı aşıldı. Yeni kod isteyin." });
+        if (request.Code.Length != 6 || !OtpCodeHasher.Verify(request.Code, challenge.CodeHash, challenge.CodeSalt)) { challenge.FailedAttempts++; await dbContext.SaveChangesAsync(cancellationToken); return Unauthorized(new { message = "Doğrulama kodu hatalı." }); }
+        var craftsman = await dbContext.Craftsmen.SingleOrDefaultAsync(x => x.Id == id && x.IsActive, cancellationToken);
+        if (craftsman is null) return NotFound(new { message = "Aktif usta bulunamadı." });
+        if (await dbContext.Craftsmen.AnyAsync(x => x.PhoneNumber == challenge.PhoneNumber && x.Id != id, cancellationToken)) return Conflict(new { message = "Bu telefon numarası başka bir hesapta kayıtlı." });
+        challenge.UsedAtUtc = DateTimeOffset.UtcNow; craftsman.PhoneNumber = challenge.PhoneNumber;
+        var sessions = await dbContext.CraftsmanSessions.Where(x => x.CraftsmanId == id && x.RevokedAtUtc == null).ToListAsync(cancellationToken); foreach (var session in sessions) session.RevokedAtUtc = DateTimeOffset.UtcNow;
+        dbContext.QueueCraftsmanNotification(id, "Security", "Telefon numaranız değiştirildi", "Hesabınızın telefon numarası güvenlik doğrulamasıyla güncellendi. Yeni numaranızla tekrar giriş yapın.", "PhoneChange", Guid.NewGuid());
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { phoneNumber = craftsman.PhoneNumber, requiresReauthentication = true });
+    }
+
+    private static string? NormalizePhone(string input)
+    {
+        var digits = new string(input.Where(char.IsDigit).ToArray());
+        return digits.Length is >= 10 and <= 15 ? digits : null;
+    }
 }
 
 public sealed record CreateCraftsmanRequest(string PhoneNumber, string FullName, string? City);
@@ -174,3 +220,5 @@ public sealed record UpdateCraftsmanProfileRequest(
     bool ExplicitConsent,
     bool CommercialCommunicationConsent,
     string? ConsentVersion);
+public sealed record PhoneChangeRequest(string NewPhoneNumber);
+public sealed record ConfirmPhoneChangeRequest(Guid ChallengeId, string Code);
