@@ -6,12 +6,13 @@ using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
 using UstaEkosistemi.Api.Security;
 using UstaEkosistemi.Api.ReliableDelivery;
+using UstaEkosistemi.Api.Sms;
 
 namespace UstaEkosistemi.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public sealed class AuthController(UstaEkosistemiDbContext dbContext, IWebHostEnvironment environment, IMemoryCache cache) : ControllerBase
+public sealed class AuthController(UstaEkosistemiDbContext dbContext, IWebHostEnvironment environment, IMemoryCache cache, ISmsDelivery smsDelivery) : ControllerBase
 {
     [HttpPost("request-code")]
     public async Task<IActionResult> RequestCode(RequestOtpCode request, CancellationToken cancellationToken)
@@ -28,6 +29,8 @@ public sealed class AuthController(UstaEkosistemiDbContext dbContext, IWebHostEn
 
         var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
         var secured = OtpCodeHasher.Hash(code);
+        try { await smsDelivery.SendOtpAsync(phone, code, cancellationToken); }
+        catch (SmsProviderNotConfiguredException) { return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "SMS doğrulama servisi henüz yapılandırılmadı." }); }
         var challenge = new OtpChallenge { PhoneNumber = phone, CodeHash = secured.Hash, CodeSalt = secured.Salt, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(3) };
         dbContext.OtpChallenges.Add(challenge); await dbContext.SaveChangesAsync(cancellationToken); cache.Set(networkKey, networkAttempts + 1, TimeSpan.FromMinutes(10));
         return Ok(new { challenge.Id, expiresInSeconds = 180, developmentCode = environment.IsDevelopment() ? code : null });

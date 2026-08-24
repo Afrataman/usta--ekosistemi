@@ -3,6 +3,7 @@ using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Security;
 using UstaEkosistemi.Api.ReliableDelivery;
 using UstaEkosistemi.Api.Observability;
+using UstaEkosistemi.Api.Sms;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -19,6 +20,8 @@ builder.Services.AddCors(options => options.AddPolicy("DevelopmentPwa", policy =
 builder.Services.AddDbContext<UstaEkosistemiDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("UstaEkosistemi")));
 builder.Services.AddScoped<DealerSessionAuthenticator>();
+if (builder.Environment.IsDevelopment()) builder.Services.AddSingleton<ISmsDelivery, DevelopmentSmsDelivery>();
+else builder.Services.AddSingleton<ISmsDelivery, UnconfiguredSmsDelivery>();
 builder.Services.AddHostedService<OutboxDispatcher>();
 
 var app = builder.Build();
