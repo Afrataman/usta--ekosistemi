@@ -7,6 +7,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     : DbContext(options)
 {
     public DbSet<Craftsman> Craftsmen => Set<Craftsman>();
+    public DbSet<CraftsmanConsent> CraftsmanConsents => Set<CraftsmanConsent>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductCode> ProductCodes => Set<ProductCode>();
     public DbSet<PointLedgerEntry> PointLedgerEntries => Set<PointLedgerEntry>();
@@ -46,6 +47,10 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.Property(x => x.FullName).HasMaxLength(120).IsRequired();
             entity.Property(x => x.City).HasMaxLength(80);
             entity.Property(x => x.Level).HasConversion<string>().HasMaxLength(20);
+        });
+        modelBuilder.Entity<CraftsmanConsent>(entity =>
+        {
+            entity.ToTable("CraftsmanConsents"); entity.HasKey(x => x.Id); entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(30); entity.Property(x => x.DocumentVersion).HasMaxLength(40).IsRequired(); entity.HasIndex(x => new { x.CraftsmanId, x.Type, x.RecordedAtUtc }); entity.HasOne(x => x.Craftsman).WithMany().HasForeignKey(x => x.CraftsmanId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Product>(entity =>

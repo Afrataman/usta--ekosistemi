@@ -140,11 +140,15 @@ export type CraftsmanProfile = {
   level: string
   campaignNotificationsEnabled: boolean
   smsNotificationsEnabled: boolean
+  privacyNoticeAcknowledged: boolean
+  explicitConsent: boolean
+  commercialCommunicationConsent: boolean
+  consentVersion: string
   createdAtUtc: string
 }
 
 export type UpdateCraftsmanProfile = Pick<CraftsmanProfile,
-  'fullName' | 'city' | 'campaignNotificationsEnabled' | 'smsNotificationsEnabled'>
+  'fullName' | 'city' | 'campaignNotificationsEnabled' | 'smsNotificationsEnabled' | 'privacyNoticeAcknowledged' | 'explicitConsent' | 'commercialCommunicationConsent' | 'consentVersion'>
 
 export async function getCraftsmanProfile(craftsmanId: string, signal?: AbortSignal): Promise<CraftsmanProfile> {
   const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, { signal })

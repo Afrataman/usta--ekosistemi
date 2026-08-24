@@ -86,7 +86,11 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : Con
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        return profile is null ? NotFound(new { message = "Usta bulunamadı." }) : Ok(profile);
+        if (profile is null) return NotFound(new { message = "Usta bulunamadı." });
+        var consents = await dbContext.CraftsmanConsents.AsNoTracking().Where(x => x.CraftsmanId == id).OrderByDescending(x => x.RecordedAtUtc).ToListAsync(cancellationToken);
+        bool latest(CraftsmanConsentType type) => consents.FirstOrDefault(x => x.Type == type)?.Granted ?? false;
+        var version = consents.FirstOrDefault(x => x.Type == CraftsmanConsentType.PrivacyNotice)?.DocumentVersion ?? "2026-08-dev";
+        return Ok(new { profile.Id, profile.FullName, profile.PhoneNumber, profile.City, profile.level, profile.CampaignNotificationsEnabled, profile.SmsNotificationsEnabled, profile.CreatedAtUtc, privacyNoticeAcknowledged = latest(CraftsmanConsentType.PrivacyNotice), explicitConsent = latest(CraftsmanConsentType.ExplicitConsent), commercialCommunicationConsent = latest(CraftsmanConsentType.CommercialCommunication), consentVersion = version });
     }
 
     [HttpGet("{id:guid}/dashboard")]
@@ -135,11 +139,18 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext) : Con
         {
             return ValidationProblem("Şehir 80 karakterden uzun olamaz.");
         }
+        var version = request.ConsentVersion?.Trim();
+        if (string.IsNullOrWhiteSpace(version) || version.Length > 40) return ValidationProblem("Onay metni sürümü zorunludur.");
+        if (craftsman.FullName == "Yeni Usta" && !request.PrivacyNoticeAcknowledged) return ValidationProblem("Kulübe katılmak için aydınlatma metnini okuduğunuzu onaylamalısınız.");
 
         craftsman.FullName = request.FullName.Trim();
         craftsman.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
         craftsman.CampaignNotificationsEnabled = request.CampaignNotificationsEnabled;
         craftsman.SmsNotificationsEnabled = request.SmsNotificationsEnabled;
+        dbContext.CraftsmanConsents.AddRange(
+            new CraftsmanConsent { CraftsmanId = id, Type = CraftsmanConsentType.PrivacyNotice, DocumentVersion = version, Granted = request.PrivacyNoticeAcknowledged },
+            new CraftsmanConsent { CraftsmanId = id, Type = CraftsmanConsentType.ExplicitConsent, DocumentVersion = version, Granted = request.ExplicitConsent },
+            new CraftsmanConsent { CraftsmanId = id, Type = CraftsmanConsentType.CommercialCommunication, DocumentVersion = version, Granted = request.CommercialCommunicationConsent });
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new
@@ -158,4 +169,8 @@ public sealed record UpdateCraftsmanProfileRequest(
     string FullName,
     string? City,
     bool CampaignNotificationsEnabled,
-    bool SmsNotificationsEnabled);
+    bool SmsNotificationsEnabled,
+    bool PrivacyNoticeAcknowledged,
+    bool ExplicitConsent,
+    bool CommercialCommunicationConsent,
+    string? ConsentVersion);
