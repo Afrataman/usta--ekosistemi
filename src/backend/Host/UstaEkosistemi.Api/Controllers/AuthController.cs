@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using UstaEkosistemi.Api.Data;
 using UstaEkosistemi.Api.Domain;
 using UstaEkosistemi.Api.Security;
@@ -10,13 +11,17 @@ namespace UstaEkosistemi.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public sealed class AuthController(UstaEkosistemiDbContext dbContext, IWebHostEnvironment environment) : ControllerBase
+public sealed class AuthController(UstaEkosistemiDbContext dbContext, IWebHostEnvironment environment, IMemoryCache cache) : ControllerBase
 {
     [HttpPost("request-code")]
     public async Task<IActionResult> RequestCode(RequestOtpCode request, CancellationToken cancellationToken)
     {
         var phone = NormalizePhone(request.PhoneNumber);
         if (phone is null) return ValidationProblem("Geçerli bir telefon numarası girin.");
+        var remoteAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var networkKey = $"otp-request-network:{remoteAddress}";
+        var networkAttempts = cache.Get<int>(networkKey);
+        if (networkAttempts >= 20) return StatusCode(StatusCodes.Status429TooManyRequests, new { message = "Bu bağlantıdan çok fazla kod istendi. 10 dakika sonra tekrar deneyin." });
         var windowStart = DateTimeOffset.UtcNow.AddMinutes(-10);
         var recentCount = await dbContext.OtpChallenges.CountAsync(x => x.PhoneNumber == phone && x.CreatedAtUtc >= windowStart, cancellationToken);
         if (recentCount >= 3) return StatusCode(StatusCodes.Status429TooManyRequests, new { message = "Çok fazla kod istendi. 10 dakika sonra tekrar deneyin." });
@@ -24,7 +29,7 @@ public sealed class AuthController(UstaEkosistemiDbContext dbContext, IWebHostEn
         var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
         var secured = OtpCodeHasher.Hash(code);
         var challenge = new OtpChallenge { PhoneNumber = phone, CodeHash = secured.Hash, CodeSalt = secured.Salt, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(3) };
-        dbContext.OtpChallenges.Add(challenge); await dbContext.SaveChangesAsync(cancellationToken);
+        dbContext.OtpChallenges.Add(challenge); await dbContext.SaveChangesAsync(cancellationToken); cache.Set(networkKey, networkAttempts + 1, TimeSpan.FromMinutes(10));
         return Ok(new { challenge.Id, expiresInSeconds = 180, developmentCode = environment.IsDevelopment() ? code : null });
     }
 
