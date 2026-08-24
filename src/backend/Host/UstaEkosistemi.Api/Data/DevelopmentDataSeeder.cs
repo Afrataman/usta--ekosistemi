@@ -14,6 +14,7 @@ public static class DevelopmentDataSeeder
     public static readonly Guid DemoDealerId = Guid.Parse("77777777-7777-7777-7777-777777777771");
     public static readonly Guid DemoDealerEmployeeId = Guid.Parse("77777777-7777-7777-7777-777777777772");
     public static readonly Guid DemoAdminId = Guid.Parse("99999999-9999-9999-9999-999999999991");
+    public static readonly Guid DemoApproverId = Guid.Parse("99999999-9999-9999-9999-999999999992");
 
     public static async Task EnsureCreatedAsync(UstaEkosistemiDbContext dbContext, CancellationToken cancellationToken)
     {
@@ -97,6 +98,7 @@ public static class DevelopmentDataSeeder
         }
 
         if (!await dbContext.AdminUsers.AnyAsync(x => x.Id == DemoAdminId, cancellationToken)) { var password = OtpCodeHasher.Hash("Usta2026!"); dbContext.AdminUsers.Add(new AdminUser { Id = DemoAdminId, UserName = "admin", FullName = "Demo Yönetici", PasswordHash = password.Hash, PasswordSalt = password.Salt }); }
+        if (!await dbContext.AdminUsers.AnyAsync(x => x.Id == DemoApproverId, cancellationToken)) { var password = OtpCodeHasher.Hash("Usta2026!"); dbContext.AdminUsers.Add(new AdminUser { Id = DemoApproverId, UserName = "onayci", FullName = "Demo Onay Yetkilisi", Role = "Approver", PasswordHash = password.Hash, PasswordSalt = password.Salt }); }
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }

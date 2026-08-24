@@ -13,6 +13,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
     public DbSet<Reward> Rewards => Set<Reward>();
     public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
     public DbSet<Campaign> Campaigns => Set<Campaign>();
+    public DbSet<CampaignApproval> CampaignApprovals => Set<CampaignApproval>();
     public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
     public DbSet<SupportResponse> SupportResponses => Set<SupportResponse>();
     public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
@@ -160,6 +161,10 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
             entity.HasIndex(x => new { x.IsActive, x.StartsAtUtc, x.EndsAtUtc });
             entity.HasIndex(x => x.ProductId);
             entity.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<CampaignApproval>(entity =>
+        {
+            entity.ToTable("CampaignApprovals"); entity.HasKey(x => x.Id); entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20); entity.Property(x => x.DecisionNote).HasMaxLength(400); entity.HasIndex(x => x.CampaignId).IsUnique(); entity.HasIndex(x => new { x.Status, x.RequestedAtUtc }); entity.HasOne(x => x.Campaign).WithMany().HasForeignKey(x => x.CampaignId).OnDelete(DeleteBehavior.Cascade); entity.HasOne(x => x.RequestedByAdminUser).WithMany().HasForeignKey(x => x.RequestedByAdminUserId).OnDelete(DeleteBehavior.Restrict); entity.HasOne(x => x.DecidedByAdminUser).WithMany().HasForeignKey(x => x.DecidedByAdminUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<SupportRequest>(entity =>
