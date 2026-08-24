@@ -42,6 +42,12 @@ Yerel veritabanı yedeği almak için PowerShell'de proje klasöründe şu komut
 
 Yedekler yalnızca bu bilgisayarda `backups` klasörüne `.bak` olarak kaydedilir ve GitHub'a gönderilmez.
 
+Son alınan yedeğin geri yüklenebilir olduğunu veritabanını değiştirmeden kontrol etmek için:
+
+```powershell
+.\scripts\verify-local-backup.ps1
+```
+
 ## Neden önce belge hazırlıyoruz?
 
 Puan, kupon, iade ve bayi işlemleri birbirini etkileyen finansal değere sahip işlemlerdir.
