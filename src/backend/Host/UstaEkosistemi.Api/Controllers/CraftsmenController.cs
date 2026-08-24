@@ -184,6 +184,7 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext, IWebH
         var secured = OtpCodeHasher.Hash(code);
         try { await smsDelivery.SendOtpAsync(phone, code, cancellationToken); }
         catch (SmsProviderNotConfiguredException) { return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "SMS doğrulama servisi henüz yapılandırılmadı." }); }
+        catch (SmsDeliveryException) { return StatusCode(StatusCodes.Status502BadGateway, new { message = "SMS doğrulama kodu gönderilemedi. Lütfen tekrar deneyin." }); }
         var challenge = new OtpChallenge { PhoneNumber = phone, CodeHash = secured.Hash, CodeSalt = secured.Salt, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(3) };
         dbContext.OtpChallenges.Add(challenge); await dbContext.SaveChangesAsync(cancellationToken); cache.Set(networkKey, attempts + 1, TimeSpan.FromMinutes(10));
         return Ok(new { challenge.Id, expiresInSeconds = 180, developmentCode = environment.IsDevelopment() ? code : null });

@@ -26,6 +26,10 @@ Terminalde gösterilen `http://localhost:5173` adresini tarayıcıda açın. Tel
 
 PWA, geliştirmede varsayılan olarak `http://localhost:5028` API adresini kullanır. Ayrı bir test sunucusuna bağlanmanız gerekirse `apps/usta-pwa/.env.example` dosyasını `.env.local` adıyla kopyalayıp yalnızca `VITE_API_URL` değerini değiştirin. Canlıda PWA ve API aynı alan adındaysa ek ayar gerekmez. Bu dosyaya parola, SQL bağlantı dizesi veya SMS sağlayıcı anahtarı yazılmaz.
 
+## Canlı pilot kararı
+
+Pilot canlı ortamı Azure App Service + Azure SQL Database üzerinde çalışacaktır. OTP doğrulaması Netgsm OTP API ile gönderilecektir; API kullanıcı adı, alt kullanıcı şifresi ve onaylı gönderici adı yalnızca canlı ortamın gizli ayarlarında `Sms__NetGsm__UserName`, `Sms__NetGsm__Password` ve `Sms__NetGsm__SenderId` olarak tutulur. İlk pilotta dijital ödül, sistemin ürettiği Usta Kulübü kuponudur; harici hediye kartı sağlayıcısı ikinci aşamadır.
+
 Sağlık kontrolü `/api/health` adresindedir. SQL Server tabloları sonraki aşamada
 Entity Framework Core migration dosyalarıyla oluşturulur; SSMS'de elle tablo
 oluşturulmamalıdır. Yerel geliştirme veritabanı `UstaEkosistemiDev` adındadır.

@@ -20,7 +20,9 @@ builder.Services.AddCors(options => options.AddPolicy("DevelopmentPwa", policy =
 builder.Services.AddDbContext<UstaEkosistemiDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("UstaEkosistemi")));
 builder.Services.AddScoped<DealerSessionAuthenticator>();
+builder.Services.Configure<NetGsmOptions>(builder.Configuration.GetSection("Sms:NetGsm"));
 if (builder.Environment.IsDevelopment()) builder.Services.AddSingleton<ISmsDelivery, DevelopmentSmsDelivery>();
+else if (builder.Configuration.GetSection("Sms:NetGsm").Get<NetGsmOptions>()?.IsConfigured == true) builder.Services.AddHttpClient<ISmsDelivery, NetGsmSmsDelivery>();
 else builder.Services.AddSingleton<ISmsDelivery, UnconfiguredSmsDelivery>();
 builder.Services.AddHostedService<OutboxDispatcher>();
 
