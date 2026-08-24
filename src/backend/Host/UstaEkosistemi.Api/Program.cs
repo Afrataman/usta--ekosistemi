@@ -26,6 +26,17 @@ builder.Services.AddHostedService<OutboxDispatcher>();
 
 var app = builder.Build();
 
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<UstaEkosistemiDbContext>();
+    if (app.Environment.IsDevelopment()) await dbContext.Database.MigrateAsync();
+    else
+    {
+        var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+        if (pendingMigrations.Any()) throw new InvalidOperationException("Bekleyen veritabanı migration'ları var. Canlıya çıkmadan önce kontrollü migration adımını çalıştırın.");
+    }
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseCors("DevelopmentPwa");
