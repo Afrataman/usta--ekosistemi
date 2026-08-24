@@ -166,6 +166,20 @@ export async function updateCraftsmanProfile(craftsmanId: string, profile: Updat
   }
 }
 
+export type PhoneChangeChallenge = { id: string; expiresInSeconds: number; developmentCode: string | null }
+export async function requestCraftsmanPhoneChange(craftsmanId: string, newPhoneNumber: string): Promise<PhoneChangeChallenge> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/phone-change/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ newPhoneNumber }) })
+  const body = await response.json().catch(() => null) as PhoneChangeChallenge & { detail?: string; message?: string } | null
+  if (!response.ok) throw new Error(body?.detail ?? body?.message ?? 'Telefon doğrulama kodu gönderilemedi.')
+  return body!
+}
+
+export async function confirmCraftsmanPhoneChange(craftsmanId: string, challengeId: string, code: string): Promise<void> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/phone-change/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, code }) })
+  const body = await response.json().catch(() => null) as { detail?: string; message?: string } | null
+  if (!response.ok) throw new Error(body?.detail ?? body?.message ?? 'Telefon numarası doğrulanamadı.')
+}
+
 export type Campaign = { id: string; title: string; summary: string; pointMultiplier: number; startsAtUtc: string; endsAtUtc: string; productId: string | null; productName: string | null }
 export type CraftsmanNotification = { id: string; type: string; title: string; message: string; referenceType: string | null; referenceId: string | null; createdAtUtc: string; readAtUtc: string | null }
 export type NotificationInbox = { unreadCount: number; items: CraftsmanNotification[] }
