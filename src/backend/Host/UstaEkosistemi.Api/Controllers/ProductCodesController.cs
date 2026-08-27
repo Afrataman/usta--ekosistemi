@@ -147,7 +147,16 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
         });
         var debtMessage = pointDebt > 0 ? $" Hesabınızda {pointDebt:N0} puan açığı oluştu; açık kapanana kadar yeni ödül alınamaz." : string.Empty;
         dbContext.QueueCraftsmanNotification(productCode.RedeemedByCraftsmanId.Value, "Return", "Ürün iadesi işlendi", $"{productCode.Product.Name} iadesi nedeniyle {originalEntry.Amount:N0} puan geri alındı. Neden: {reason}.{debtMessage}", nameof(ProductCode), productCode.Id);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            foreach (var entry in dbContext.ChangeTracker.Entries().Where(x => x.State == EntityState.Added).ToList()) entry.State = EntityState.Detached;
+            return Conflict(new { message = "Bu ürün kodunun iadesi başka bir bayi tarafından aynı anda işlendi. Puan ikinci kez geri alınmadı." });
+        }
         await transaction.CommitAsync(cancellationToken);
         return Ok(new { alreadyProcessed = false, reversedPoints = originalEntry.Amount, balance, pointDebt, rewardRedemptionRestricted = pointDebt > 0, product = productCode.Product.Name, productCode.ReturnedAtUtc });
     }

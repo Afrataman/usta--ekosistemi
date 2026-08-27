@@ -23,9 +23,11 @@ public sealed class DealerCouponTests
         var reward = new Reward { Name = "Takım Çantası", Description = "Bayiden teslim test ödülü", PointCost = 2_500, DeliveryType = RewardDeliveryType.DealerPickup, ImageKey = "tool-bag" };
         var dealer = new Dealer { Code = "TEST-DEALER", Name = "Test Bayi" };
         var employee = new DealerEmployee { Dealer = dealer, FullName = "Test Çalışanı" };
+        var secondEmployee = new DealerEmployee { Dealer = dealer, FullName = "İkinci Çalışan" };
         var redemption = new RewardRedemption { Craftsman = craftsman, Reward = reward, PointsSpent = 2_500, FulfillmentCode = "TESLIM-001" };
-        db.AddRange(craftsman, reward, dealer, employee, redemption);
+        db.AddRange(craftsman, reward, dealer, employee, secondEmployee, redemption);
         db.DealerSessions.Add(new DealerSession { DealerEmployee = employee, TokenHash = DealerSessionAuthenticator.HashToken("dealer-token"), ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1) });
+        db.DealerSessions.Add(new DealerSession { DealerEmployee = secondEmployee, TokenHash = DealerSessionAuthenticator.HashToken("dealer-token-two"), ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1) });
         await db.SaveChangesAsync();
         var controller = ControllerFor(db);
 
@@ -33,7 +35,8 @@ public sealed class DealerCouponTests
         Assert.Equal(RewardRedemptionStatus.Created, (await db.RewardRedemptions.SingleAsync()).Status);
 
         Assert.IsType<OkObjectResult>(await controller.Fulfill("TESLIM-001", CancellationToken.None));
-        Assert.IsType<OkObjectResult>(await controller.Fulfill("TESLIM-001", CancellationToken.None));
+        var secondController = ControllerFor(db, "dealer-token-two");
+        Assert.IsType<OkObjectResult>(await secondController.Fulfill("TESLIM-001", CancellationToken.None));
 
         var saved = await db.RewardRedemptions.SingleAsync();
         Assert.Equal(RewardRedemptionStatus.Fulfilled, saved.Status);
@@ -55,11 +58,11 @@ public sealed class DealerCouponTests
         Assert.Equal(Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAddOrUpdate, property.ValueGenerated);
     }
 
-    private static DealerCouponsController ControllerFor(UstaEkosistemiDbContext db)
+    private static DealerCouponsController ControllerFor(UstaEkosistemiDbContext db, string token = "dealer-token")
     {
         var controller = new DealerCouponsController(db, new DealerSessionAuthenticator(db));
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
-        controller.Request.Headers.Authorization = "Bearer dealer-token";
+        controller.Request.Headers.Authorization = $"Bearer {token}";
         return controller;
     }
 }
