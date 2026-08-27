@@ -4,6 +4,7 @@ using UstaEkosistemi.Api.Security;
 using UstaEkosistemi.Api.ReliableDelivery;
 using UstaEkosistemi.Api.Observability;
 using UstaEkosistemi.Api.Sms;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -13,6 +14,19 @@ builder.Logging.AddSimpleConsole(options => options.IncludeScopes = true);
 
 builder.Services.AddControllers();
 builder.Services.AddMemoryCache();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("api", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true,
+        }));
+});
 builder.Services.AddCors(options => options.AddPolicy("DevelopmentPwa", policy =>
     policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
         .AllowAnyHeader()
@@ -52,7 +66,16 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=()";
+    await next();
+});
+
 app.UseMiddleware<RequestCorrelationMiddleware>();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.UseMiddleware<AdminAuthenticationMiddleware>();
 app.UseMiddleware<CraftsmanAuthenticationMiddleware>();
