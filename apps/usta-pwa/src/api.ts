@@ -75,7 +75,9 @@ export type RedeemResult = {
 export type WalletMovement = {
   id: string
   amount: number
-  transactionType: number
+  transactionType: string
+  referenceType: string
+  referenceId: string
   description: string
   createdAtUtc: string
 }
@@ -83,7 +85,7 @@ export type WalletMovement = {
 export type Wallet = {
   id: string
   fullName: string
-  level: number
+  level: string
   balance: number
   availablePoints: number
   pointDebt: number

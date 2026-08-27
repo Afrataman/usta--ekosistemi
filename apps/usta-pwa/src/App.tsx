@@ -386,8 +386,8 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
   const [error, setError] = useState(false)
 
   // Yeni State'ler: Filtreleme ve Detay Modalı için
-  const [filter, setFilter] = useState<'all' | 'earned' | 'spent'>('all')
-  const [selectedMovement, setSelectedMovement] = useState<any | null>(null)
+  const [filter, setFilter] = useState<'all' | 'earned' | 'spent' | 'returned' | 'adjustment'>('all')
+  const [selectedMovement, setSelectedMovement] = useState<WalletData['movements'][number] | null>(null)
 
   useEffect(() => {
     if (!dashboard.craftsmanId) return
@@ -398,17 +398,19 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
 
   const availablePoints = wallet?.availablePoints ?? dashboard.availablePoints
   const pointDebt = wallet?.pointDebt ?? dashboard.pointDebt
-  const movements = wallet?.movements ?? dashboard.movements.map((movement, index) => ({ ...movement, id: String(index), transactionType: 0 }))
+  const movements = wallet?.movements ?? dashboard.movements.map((movement, index) => ({ ...movement, id: String(index), transactionType: movement.amount > 0 ? 'ProductCodeEarned' : 'RewardRedeemed', referenceType: 'Demo', referenceId: String(index) }))
 
   // Hareketleri filtreleme mantığı
   const filteredMovements = movements.filter(m => {
-      if (filter === 'earned') return m.amount > 0
-      if (filter === 'spent') return m.amount < 0
+      if (filter === 'earned') return m.transactionType === 'ProductCodeEarned' || (m.amount > 0 && m.transactionType !== 'ReturnReversal')
+      if (filter === 'spent') return m.transactionType === 'RewardRedeemed'
+      if (filter === 'returned') return m.transactionType === 'ReturnReversal'
+      if (filter === 'adjustment') return m.transactionType === 'ManualAdjustment'
       return true
   })
 
   // İşlem türüne göre başlık/ikon eşleştirmesi (Varsayılan veya Backend'den gelen tipe göre)
-  const getTransactionLabel = (amount: number) => amount > 0 ? 'Puan Kazanımı' : 'Puan Harcaması / İade'
+  const getTransactionLabel = (movement: WalletData['movements'][number]) => ({ ProductCodeEarned: 'Ürün kodu kazanımı', RewardRedeemed: 'Ödül harcaması', ReturnReversal: 'İade puan geri alımı', ManualAdjustment: 'Yönetici düzeltmesi' }[movement.transactionType] ?? (movement.amount > 0 ? 'Puan kazanımı' : 'Puan hareketi'))
 
   return (
     <>
@@ -444,12 +446,14 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
           <select
               className="movement-filter-select"
               value={filter}
-              onChange={(e) => setFilter(e.target.value as 'all' | 'earned' | 'spent')}
+              onChange={(e) => setFilter(e.target.value as 'all' | 'earned' | 'spent' | 'returned' | 'adjustment')}
               aria-label="Puan hareketlerini filtrele"
           >
               <option value="all">Tümü</option>
               <option value="earned">Kazanılanlar (+)</option>
-              <option value="spent">Harcananlar (-)</option>
+              <option value="spent">Ödül harcamaları (-)</option>
+              <option value="returned">İade geri alımları</option>
+              <option value="adjustment">Yönetici düzeltmeleri</option>
           </select>
       </div>
 
@@ -461,6 +465,7 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
           <article
               key={movement.id}
               onClick={() => setSelectedMovement(movement)}
+              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedMovement(movement) } }}
               role="button"
               tabIndex={0}
               style={{ cursor: 'pointer' }}
@@ -490,7 +495,7 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
                   </div>
 
                   <h2 id="movement-dialog-title" style={{ textAlign: 'center' }}>
-                      {getTransactionLabel(selectedMovement.amount)}
+                      {getTransactionLabel(selectedMovement)}
                   </h2>
 
                   <div className="coupon-code-display" style={{ padding: '15px', background: 'var(--bg-card)', borderRadius: '8px', margin: '15px 0' }}>
@@ -502,10 +507,8 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
                   <div className="coupon-meta-info">
                       <p><strong>Açıklama:</strong> {selectedMovement.description}</p>
                       <p><strong>Tarih:</strong> {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long', timeStyle: 'medium' }).format(new Date(selectedMovement.createdAtUtc))}</p>
-                      {/* Gerçek veritabanı ID'si varsa göster */}
-                      {selectedMovement.id && selectedMovement.id.length > 5 && (
-                          <p><strong>İşlem Referansı:</strong> <span style={{ fontSize: '11px', opacity: 0.8 }}>{selectedMovement.id}</span></p>
-                      )}
+                      <p><strong>İşlem türü:</strong> {getTransactionLabel(selectedMovement)}</p>
+                      <p><strong>Referans:</strong> {selectedMovement.referenceType} · <span style={{ fontSize: '11px', opacity: 0.8 }}>{selectedMovement.referenceId}</span></p>
                   </div>
 
                   <div className="dialog-actions">

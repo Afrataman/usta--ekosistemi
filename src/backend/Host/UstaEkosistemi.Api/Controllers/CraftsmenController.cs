@@ -57,7 +57,7 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext, IWebH
             .Where(x => x.CraftsmanId == id)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Take(20)
-            .Select(x => new { x.Id, x.Amount, x.TransactionType, x.Description, x.CreatedAtUtc })
+            .Select(x => new { x.Id, x.Amount, transactionType = x.TransactionType.ToString(), x.ReferenceType, x.ReferenceId, x.Description, x.CreatedAtUtc })
             .ToListAsync(cancellationToken);
 
         return Ok(new
