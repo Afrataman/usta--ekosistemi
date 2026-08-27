@@ -1813,9 +1813,11 @@ function DealerLogin({ onAuthenticated }: { onAuthenticated: (profile: DealerLog
 
 function DealerPortal({ risk = false, history = false }: { risk?: boolean; history?: boolean }) {
   const [profile, setProfile] = useState<DealerLoginResult | null>(null)
-  if (!profile) return <DealerLogin onAuthenticated={setProfile} />
+  const [online, setOnline] = useState(navigator.onLine)
+  useEffect(() => { const update = () => setOnline(navigator.onLine); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update) } }, [])
+  if (!profile) return <>{!online && <div className="dealer-offline-banner" role="alert">⌁ İnternet bağlantısı yok — bayi işlemleri sunucu bağlantısı gelince kullanılabilir.</div>}<DealerLogin onAuthenticated={setProfile} /></>
   const exit = async () => { await logoutDealer(); setProfile(null) }
-  return <>{risk ? <DealerRiskPage /> : history ? <DealerActivityPage /> : <DealerApp />}<div className="dealer-shortcuts"><a href="/dealer">İşlemler</a><a href="/dealer/history">Geçmiş</a><a href="/dealer/risk">Şüpheli İşlem</a></div><button className="dealer-logout" onClick={exit} type="button">Oturumu Kapat</button></>
+  return <>{!online && <div className="dealer-offline-banner" role="alert">⌁ İnternet bağlantısı yok — teslim, iade ve satış işlemleri sunucu onayı bekler.</div>}{risk ? <DealerRiskPage /> : history ? <DealerActivityPage /> : <DealerApp />}<div className="dealer-shortcuts"><a href="/dealer">İşlemler</a><a href="/dealer/history">Geçmiş</a><a href="/dealer/risk">Şüpheli İşlem</a></div><button className="dealer-logout" onClick={exit} type="button">Oturumu Kapat</button></>
 }
 
 function DealerPerformance({ refreshKey }: { refreshKey: number }) {
