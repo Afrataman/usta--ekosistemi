@@ -19,6 +19,10 @@ export type Dashboard = {
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:5028' : window.location.origin)
+export class ApiRequestError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) { super(message); this.name = 'ApiRequestError'; this.status = status }
+}
 const craftsmanHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('usta-token') ?? ''}` })
 const craftsmanFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, { ...init, headers: { ...craftsmanHeaders(), ...(init.headers as Record<string, string> | undefined) } })
 const adminHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('admin-token') ?? ''}` })
@@ -264,7 +268,7 @@ export async function redeemProductCode(craftsmanId: string, code: string, reque
 
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { message?: string } | null
-    throw new Error(body?.message ?? 'Kod kullanılamadı. Lütfen tekrar deneyin.')
+    throw new ApiRequestError(body?.message ?? 'Kod kullanılamadı. Lütfen tekrar deneyin.', response.status)
   }
 
   return response.json() as Promise<RedeemResult>

@@ -9,6 +9,7 @@ import { onboardAdminDealer, type DealerOnboardingResult } from './api'
 import { getAdminAudit, type AdminAuditResponse } from './api'
 import { decideAdminCampaignApproval, getAdminCampaignApprovals, type CampaignApproval } from './api'
 import { getAdminOutbox, retryAdminOutbox, type AdminOutboxResponse } from './api'
+import { ApiRequestError } from './api'
 import './App.css'
 import { clearPendingRedemptions, enqueueRedemption, getPendingRedemptions, removePendingRedemption } from './offlineQueue'
 import QRCode from 'qrcode'
@@ -57,6 +58,7 @@ function cachedDashboard() { try { const value = localStorage.getItem('usta-dash
 
 const numberFormatter = new Intl.NumberFormat('tr-TR')
 const dateFormatter = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+const shouldKeepPendingRedemption = (error: unknown) => error instanceof TypeError || (error instanceof ApiRequestError && (error.status === 401 || error.status === 403 || error.status === 429 || error.status >= 500))
 const levelNames: Record<string, string> = { Bronze: 'Bronz', Silver: 'Gümüş', Gold: 'Altın' }
 
 function BottomNav({ screen, setScreen }: { screen: Screen; setScreen: (screen: Screen) => void }) {
@@ -171,7 +173,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
       if (!navigator.onLine) return
       for (const item of pending) {
         try { await redeemProductCode(item.craftsmanId, item.code, item.requestId); await removePendingRedemption(item.requestId); if (active) setPendingCount((count) => Math.max(0, count - 1)); await onRedeemed(); if (active) setResult({ kind: 'success', message: 'Bekleyen ürün kodu sunucuda güvenle işlendi.' }) }
-        catch (error) { if (error instanceof TypeError) return; await removePendingRedemption(item.requestId); if (active) { setPendingCount((count) => Math.max(0, count - 1)); setResult({ kind: 'error', message: error instanceof Error ? error.message : 'Bekleyen kod işlenemedi.' }) } }
+        catch (error) { if (shouldKeepPendingRedemption(error)) { if (active) setResult({ kind: 'error', message: 'Bekleyen işlem henüz gönderilemedi; bağlantı veya oturum düzelince tekrar denenecek.' }); return } await removePendingRedemption(item.requestId); if (active) { setPendingCount((count) => Math.max(0, count - 1)); setResult({ kind: 'error', message: error instanceof Error ? error.message : 'Bekleyen kod işlenemedi.' }) } }
       }
     }
     void retryPending(); window.addEventListener('online', retryPending)
@@ -211,7 +213,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
       setCode('')
       scanningRef.current = false // Kamerayı yeni okuma için serbest bırak
     } catch (error) {
-      if (error instanceof TypeError) { const count = await enqueueRedemption({ requestId, craftsmanId, code: normalizedCode, createdAtUtc: new Date().toISOString() }); setPendingCount(count); setResult({ kind: 'success', message: 'Sunucuya ulaşılamadı; işlem kuyruğa alındı.' }); setCode('') }
+      if (shouldKeepPendingRedemption(error)) { const count = await enqueueRedemption({ requestId, craftsmanId, code: normalizedCode, createdAtUtc: new Date().toISOString() }); setPendingCount(count); setResult({ kind: 'success', message: 'İşlem şu an tamamlanamadı; güvenli kuyruğa alındı ve tekrar denenecek.' }); setCode('') }
       else setResult({ kind: 'error', message: error instanceof Error ? error.message : 'Kod kullanılamadı.' })
       scanningRef.current = false
     } finally {
@@ -911,6 +913,17 @@ function AdminApp() {
   async function load() { const [summary, risks] = await Promise.all([getAdminOverview(), getAdminRiskCases()]); setOverview(summary); setItems(risks) }
   useEffect(() => { load().catch(() => setMessage('Yönetici verileri yüklenemedi.')) }, [])
   async function changeStatus(id: string, status: 'InReview' | 'Resolved' | 'Rejected') { const note = notes[id]?.trim() ?? ''; if (note.length < 5) { setMessage('Karar vermeden önce en az 5 karakterlik inceleme notu yazın.'); return } setBusyId(id); setMessage(''); try { await updateAdminRiskStatus(id, status, note); setNotes((current) => ({ ...current, [id]: '' })); await load() } catch (error) { setMessage(error instanceof Error ? error.message : 'Durum güncellenemedi.') } finally { setBusyId('') } }
+  useEffect(() => {
+    const destinations = ['/admin', '/admin/craftsmen', '/admin/dealers', '/admin/campaigns', '/admin/rewards', '/admin']
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.admin-shell aside nav > button'))
+    const handlers = buttons.map((button, index) => {
+      const handler = () => window.location.assign(destinations[index])
+      button.addEventListener('click', handler)
+      return { button, handler }
+    })
+    return () => handlers.forEach(({ button, handler }) => button.removeEventListener('click', handler))
+  }, [])
+
   const labels: Record<AdminRiskCase['status'], string> = { Open: 'Açık', InReview: 'İncelemede', Resolved: 'Çözüldü', Rejected: 'Reddedildi' }
   return <main className="admin-shell"><aside><div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div><nav><button className="active" type="button">⌂ Genel Bakış</button><button type="button">♧ Ustalar</button><button type="button">▣ Bayiler</button><button type="button">◇ Kampanyalar</button><button type="button">♙ Ödüller</button><button type="button">⚑ Risk Kontrolü</button></nav><a href="/">Usta uygulaması</a><a href="/dealer">Bayi paneli</a></aside><section className="admin-main"><header><div><span>YÖNETİCİ PANELİ</span><h1>Genel Bakış</h1></div><b>Demo Yönetici</b></header>{message && <p className="admin-message">{message}</p>}<div className="admin-stats"><article><span>♧</span><div><small>Aktif Usta</small><strong>{overview?.craftsmen ?? '—'}</strong></div></article><article><span>▣</span><div><small>Aktif Bayi</small><strong>{overview?.dealers ?? '—'}</strong></div></article><article><span>♙</span><div><small>Aktif Kupon</small><strong>{overview?.activeCoupons ?? '—'}</strong></div></article><article className="risk"><span>⚑</span><div><small>Açık Risk Kaydı</small><strong>{overview?.openRiskCases ?? '—'}</strong></div></article></div><div className="admin-section-title"><div><h2>Şüpheli İşlemler</h2><p>Bayi çalışanlarından gelen son bildirimler</p></div><span>{items.length} kayıt</span></div><section className="admin-risk-list">{items.length === 0 && <p>Henüz şüpheli işlem bildirimi bulunmuyor.</p>}{items.map((item) => <article key={item.id}><div className="risk-head"><span>{item.referenceType === 'ProductCode' ? 'ÜRÜN KODU' : item.referenceType === 'Coupon' ? 'KUPON' : 'SATIŞ'}</span><b className={item.status}>{labels[item.status]}</b></div><h3>{item.reason}</h3><code>{item.referenceValue}</code><p>{item.description}</p><small>{item.dealer} · {item.dealerEmployee} · {dateFormatter.format(new Date(item.createdAtUtc))}</small>{item.actions.length > 0 && <div className="risk-history"><strong>İnceleme geçmişi</strong>{item.actions.map((action) => <div key={action.id}><b>{labels[action.status]}</b><p>{action.decisionNote}</p><small>{action.reviewer} · {dateFormatter.format(new Date(action.createdAtUtc))}</small></div>)}</div>}<label className="risk-note">İnceleme / karar notu<textarea value={notes[item.id] ?? ''} onChange={(event) => setNotes({ ...notes, [item.id]: event.target.value })} minLength={5} maxLength={1000} placeholder="Kanıtı ve karar gerekçesini yazın…" /></label><div className="risk-actions"><button onClick={() => changeStatus(item.id, 'InReview')} disabled={busyId === item.id || item.status !== 'Open' || (notes[item.id]?.trim().length ?? 0) < 5} type="button">İncelemeye Al</button><button onClick={() => changeStatus(item.id, 'Resolved')} disabled={busyId === item.id || item.status === 'Resolved' || (notes[item.id]?.trim().length ?? 0) < 5} type="button">Çözüldü</button><button onClick={() => changeStatus(item.id, 'Rejected')} disabled={busyId === item.id || item.status === 'Rejected' || (notes[item.id]?.trim().length ?? 0) < 5} type="button">Reddet</button></div></article>)}</section></section></main>
 }

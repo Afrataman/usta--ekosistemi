@@ -58,6 +58,24 @@ button:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
 .scan-instruction { margin:45px 0 14px; text-align:center; font-size:15px; }
 .camera-frame { position:relative; display:grid; place-items:center; height:268px; }
 .camera-preview { position:absolute; inset:8px; width:calc(100% - 16px); height:calc(100% - 16px); border-radius:18px; object-fit:cover; opacity:0; }.camera-preview.active { opacity:.78; }.camera-status { position:absolute; bottom:3px; z-index:3; max-width:85%; padding:7px 10px; border-radius:8px; color:#d5e5eb; background:rgba(2,13,22,.82); font-size:9px; text-align:center; }
+.camera-error-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 250px;
+  text-align: center;
+  padding: 16px;
+  gap: 8px;
+  color: #d5e5eb;
+  border: 1px solid rgba(255, 107, 107, .35);
+  border-radius: 14px;
+  background: rgba(2, 13, 22, .82);
+}
+
+.camera-error-icon { color: #ff8a8a; font-size: 30px; line-height: 1; }
+.camera-error-box strong { color: #fff; font-size: 16px; }
+.camera-error-box small { color: #a9c0ca; font-size: 12px; line-height: 1.45; }
 .corner { position:absolute; width:31px; height:31px; border-color:var(--cyan); border-style:solid; }
 .corner.tl { top:0; left:12px; border-width:4px 0 0 4px; border-radius:9px 0 0; }.corner.tr { top:0; right:12px; border-width:4px 4px 0 0; border-radius:0 9px 0 0; }.corner.bl { bottom:0; left:12px; border-width:0 0 4px 4px; border-radius:0 0 0 9px; }.corner.br { right:12px; bottom:0; border-width:0 4px 4px 0; border-radius:0 0 9px; }
 .product-box { position:relative; width:195px; height:185px; transform:skewY(-5deg); border:1px solid #71808b; background:linear-gradient(115deg,#0e2a3e,#071523); box-shadow:0 24px 35px rgba(0,0,0,.45); }

@@ -1,14 +1,19 @@
 export type PendingRedemption = { requestId: string; craftsmanId: string; code: string; createdAtUtc: string }
 
 const queueKey = 'usta-encrypted-redemption-queue'
-const sessionKey = 'usta-redemption-session-key'
+const keyStorageKey = 'usta-redemption-local-key'
+const legacySessionKey = 'usta-redemption-session-key'
 
 function bytesToBase64(bytes: Uint8Array) { return btoa(String.fromCharCode(...bytes)) }
 function base64ToBytes(value: string) { return Uint8Array.from(atob(value), (character) => character.charCodeAt(0)) }
 
 async function getKey() {
-  let encoded = sessionStorage.getItem(sessionKey)
-  if (!encoded) { encoded = bytesToBase64(crypto.getRandomValues(new Uint8Array(32))); sessionStorage.setItem(sessionKey, encoded) }
+  let encoded = localStorage.getItem(keyStorageKey)
+  if (!encoded) {
+    encoded = sessionStorage.getItem(legacySessionKey) ?? bytesToBase64(crypto.getRandomValues(new Uint8Array(32)))
+    localStorage.setItem(keyStorageKey, encoded)
+    sessionStorage.removeItem(legacySessionKey)
+  }
   return crypto.subtle.importKey('raw', base64ToBytes(encoded), 'AES-GCM', false, ['encrypt', 'decrypt'])
 }
 
@@ -29,7 +34,12 @@ async function writeQueue(items: PendingRedemption[]) {
   localStorage.setItem(queueKey, JSON.stringify({ iv: bytesToBase64(iv), data: bytesToBase64(new Uint8Array(encrypted)) }))
 }
 
-export async function enqueueRedemption(item: PendingRedemption) { const items = await readQueue(); if (!items.some((existing) => existing.requestId === item.requestId)) await writeQueue([...items, item].slice(-10)); return items.length + 1 }
+export async function enqueueRedemption(item: PendingRedemption) {
+  const items = await readQueue()
+  const nextItems = items.some((existing) => existing.requestId === item.requestId) ? items : [...items, item].slice(-10)
+  await writeQueue(nextItems)
+  return nextItems.length
+}
 export async function getPendingRedemptions(craftsmanId: string) { return (await readQueue()).filter((item) => item.craftsmanId === craftsmanId) }
 export async function removePendingRedemption(requestId: string) { await writeQueue((await readQueue()).filter((item) => item.requestId !== requestId)) }
-export function clearPendingRedemptions() { localStorage.removeItem(queueKey); sessionStorage.removeItem(sessionKey) }
+export function clearPendingRedemptions() { localStorage.removeItem(queueKey); localStorage.removeItem(keyStorageKey); sessionStorage.removeItem(legacySessionKey) }
