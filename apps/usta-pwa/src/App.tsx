@@ -116,6 +116,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   const [cameraAttempt, setCameraAttempt] = useState(0)
   const [pendingCount, setPendingCount] = useState(0)
   const [online, setOnline] = useState(navigator.onLine)
+  const [helpOpen, setHelpOpen] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const scanningRef = useRef(false)
@@ -251,7 +252,9 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
 
   return (
     <>
-      <header className="page-header"><button onClick={back} aria-label="Geri Dön" type="button">‹</button><h1>Ürün Kodunu Okut</h1><button type="button" aria-label="Yardım">?</button></header>
+      <header className="page-header"><button onClick={back} aria-label="Geri Dön" type="button">‹</button><h1>Ürün Kodunu Okut</h1><button onClick={() => setHelpOpen((open) => !open)} aria-expanded={helpOpen} aria-controls="scanner-help" type="button" aria-label="QR okutma yardımı">?</button></header>
+
+      {helpOpen && <aside className="scanner-help" id="scanner-help" role="dialog" aria-label="QR okutma yardımı"><strong>QR nasıl okutulur?</strong><p>Kodu aydınlık bir ortamda çerçevenin içine hizalayın. Kamera izni verilmezse aşağıdaki “Kodu Elle Gir” seçeneğini kullanabilirsiniz.</p><button onClick={() => setHelpOpen(false)} type="button">Anladım</button></aside>}
 
       {cameraState === 'active' && <p className="scan-instruction">Kodu çerçevenin içine hizalayın</p>}
 
