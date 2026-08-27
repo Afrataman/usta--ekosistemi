@@ -91,7 +91,13 @@ public sealed class AdminProductsController(UstaEkosistemiDbContext dbContext) :
     [HttpPatch("{id:guid}/active")]
     public async Task<IActionResult> SetActive(Guid id, SetActiveRequest request, CancellationToken token)
     {
-        var product = await dbContext.Products.SingleOrDefaultAsync(x => x.Id == id, token); if (product is null) return NotFound(new { message = "Ürün bulunamadı." }); product.IsActive = request.IsActive; await dbContext.SaveChangesAsync(token); return Ok(new { product.Id, product.IsActive });
+        var product = await dbContext.Products.SingleOrDefaultAsync(x => x.Id == id, token);
+        if (product is null) return NotFound(new { message = "Ürün bulunamadı." });
+        if (product.IsActive == request.IsActive) return Ok(new { product.Id, product.IsActive });
+        product.IsActive = request.IsActive;
+        dbContext.AddAdminAudit(HttpContext, request.IsActive ? "ProductActivated" : "ProductDeactivated", nameof(Product), product.Id, $"SKU={product.Sku}; durum={(request.IsActive ? "aktif" : "pasif")}");
+        await dbContext.SaveChangesAsync(token);
+        return Ok(new { product.Id, product.IsActive });
     }
 }
 
