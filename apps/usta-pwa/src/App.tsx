@@ -60,6 +60,7 @@ function cachedDashboard() { try { const value = localStorage.getItem('usta-dash
 
 const numberFormatter = new Intl.NumberFormat('tr-TR')
 const dateFormatter = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+function dashboardUpdatedLabel(updatedAtUtc: string) { return updatedAtUtc === fallbackDashboard.updatedAtUtc ? 'Henüz senkronize edilmedi' : dateFormatter.format(new Date(updatedAtUtc)) }
 const shouldKeepPendingRedemption = (error: unknown) => error instanceof TypeError || (error instanceof ApiRequestError && (error.status === 401 || error.status === 403 || error.status === 429 || error.status >= 500))
 const levelNames: Record<string, string> = { Bronze: 'Bronz', Silver: 'Gümüş', Gold: 'Altın' }
 
@@ -82,7 +83,7 @@ function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dash
       <p className="hello">Merhaba {dashboard.fullName} 👋 <i className={connected ? 'api-dot connected' : 'api-dot'} title={connected ? 'SQL Server bağlantısı açık' : 'Örnek veriler gösteriliyor'} /></p>
 
       <section className="points-card">
-        <div><strong>{numberFormatter.format(dashboard.availablePoints)} <small>puan</small></strong><p>Bu puanla alabileceğiniz ödüllerin<br />değeri: {numberFormatter.format(dashboard.rewardValueTry)} TL'ye kadar</p></div><span className="gift-art">♙</span>
+        <div><strong>{numberFormatter.format(dashboard.availablePoints)} <small>puan</small></strong><p>Bu puanla alabileceğiniz ödüllerin<br />değeri: {numberFormatter.format(dashboard.rewardValueTry)} TL'ye kadar</p><small className="points-updated">Son güncelleme: {dashboardUpdatedLabel(dashboard.updatedAtUtc)}</small></div><span className="gift-art">♙</span>
       </section>
       {dashboard.pointDebt > 0 && <div className="point-debt-warning"><strong>{numberFormatter.format(dashboard.pointDebt)} puan açığınız var</strong><span>İade sonrası oluşan açık kapanana kadar yeni ödül alamazsınız. Kazandığınız yeni puanlar önce bu açığı kapatır.</span></div>}
 
@@ -2262,7 +2263,7 @@ function CraftsmanApp() {
   return <main className="app-shell">
     <div className="status-bar"><strong>9:41</strong><span>▮▮ ◔ ▰</span></div>
     <InstallPrompt />
-    {!online && <div className="offline-banner">⌁ Çevrimdışısın — kayıtlı bakiye gösteriliyor. Son güncelleme: {dashboard.updatedAtUtc === fallbackDashboard.updatedAtUtc ? 'bilinmiyor' : dateFormatter.format(new Date(dashboard.updatedAtUtc))}</div>}
+    {!online && <div className="offline-banner">⌁ Çevrimdışısın — kayıtlı bakiye gösteriliyor.</div>}
     {screen === 'home' && <Home go={setScreen} dashboard={dashboard} connected={connected} />}
     {screen === 'scan' && <Scanner back={() => setScreen('home')} craftsmanId={dashboard.craftsmanId} onRedeemed={refreshDashboard} />}
     {screen === 'rewards' && <Rewards availablePoints={dashboard.availablePoints} pointDebt={dashboard.pointDebt} craftsmanId={dashboard.craftsmanId} onBalanceChanged={refreshDashboard} />}
