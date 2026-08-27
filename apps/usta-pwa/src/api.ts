@@ -135,7 +135,10 @@ export type RewardRedemption = {
   pointsSpent: number
   fulfillmentCode: string
   createdAtUtc: string
+  expiresAtUtc: string | null
   fulfilledAtUtc: string | null
+  fulfilledByDealerEmployee: string | null
+  fulfilledByDealer: string | null
 }
 
 export type CraftsmanProfile = {

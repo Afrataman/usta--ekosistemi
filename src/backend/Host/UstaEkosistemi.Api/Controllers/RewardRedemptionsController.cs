@@ -30,7 +30,9 @@ public sealed class RewardRedemptionsController(UstaEkosistemiDbContext dbContex
                 x.FulfillmentCode,
                 x.CreatedAtUtc,
                 x.ExpiresAtUtc,
-                x.FulfilledAtUtc
+                x.FulfilledAtUtc,
+                fulfilledByDealerEmployee = x.FulfilledByDealerEmployee == null ? null : x.FulfilledByDealerEmployee.FullName,
+                fulfilledByDealer = x.FulfilledByDealerEmployee == null ? null : x.FulfilledByDealerEmployee.Dealer.Name
             })
             .ToListAsync(cancellationToken);
 

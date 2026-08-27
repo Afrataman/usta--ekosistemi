@@ -546,17 +546,24 @@ function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void 
   }, [craftsmanId])
 
   // Seçilen sekmeye göre listeyi filtreleme
+  const isCouponExpired = (item: RewardRedemption) => item.status === 'Created' && !!item.expiresAtUtc && new Date(item.expiresAtUtc).getTime() <= Date.now()
+  const couponStatusLabel = (item: RewardRedemption) => {
+      if (isCouponExpired(item)) return 'Süresi Doldu'
+      if (item.status === 'Created') return 'Aktif'
+      if (item.status === 'Fulfilled') return item.deliveryType === 'Digital' ? 'Teslim Edildi' : 'Kullanıldı'
+      return 'İptal'
+  }
   const filteredItems = items.filter(item => {
-      if (activeTab === 'active') return item.status === 'Created'
+      if (activeTab === 'active') return item.status === 'Created' && !isCouponExpired(item)
       if (activeTab === 'used') return item.status === 'Fulfilled'
-      if (activeTab === 'cancelled') return item.status === 'Cancelled'
+      if (activeTab === 'cancelled') return item.status === 'Cancelled' || isCouponExpired(item)
       return true
   })
 
   // Kupona tıklandığında detay modülünü açma ve QR Kod üretme
   const openCouponDetail = async (item: RewardRedemption) => {
     setSelectedCoupon(item)
-    if (item.deliveryType === 'DealerPickup' && item.status === 'Created') {
+    if (item.deliveryType === 'DealerPickup' && item.status === 'Created' && !isCouponExpired(item)) {
         try {
             const qr = await QRCode.toDataURL(item.fulfillmentCode, { width: 240, margin: 1, color: { dark: '#041521', light: '#ffffff' } })
             setQrImage(qr)
@@ -587,6 +594,7 @@ function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void 
           <button role="tab" aria-selected={activeTab === 'all'} className={activeTab === 'all' ? 'selected' : ''} onClick={() => setActiveTab('all')} type="button">Tümü</button>
           <button role="tab" aria-selected={activeTab === 'active'} className={activeTab === 'active' ? 'selected' : ''} onClick={() => setActiveTab('active')} type="button">Aktif</button>
           <button role="tab" aria-selected={activeTab === 'used'} className={activeTab === 'used' ? 'selected' : ''} onClick={() => setActiveTab('used')} type="button">Kullanılmış</button>
+          <button role="tab" aria-selected={activeTab === 'cancelled'} className={activeTab === 'cancelled' ? 'selected' : ''} onClick={() => setActiveTab('cancelled')} type="button">İptal / Süresi dolan</button>
       </div>
 
       {loading && <div className="coupon-state" aria-live="polite">Kuponlar yükleniyor…</div>}
@@ -603,23 +611,19 @@ function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void 
       <section className="coupon-list">
           {filteredItems.map((item) => (
               <article
-                  className={item.status === 'Created' || item.deliveryType === 'Digital' ? 'coupon-card' : 'coupon-card inactive'}
+                  className={item.status === 'Created' && !isCouponExpired(item) || item.deliveryType === 'Digital' && item.status === 'Fulfilled' ? 'coupon-card' : 'coupon-card inactive'}
                   key={item.id}
                   onClick={() => openCouponDetail(item)} // Tıklanabilirlik eklendi
                   style={{ cursor: 'pointer' }}
                   role="button"
                   tabIndex={0}
+                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void openCouponDetail(item) } }}
               >
                   <div className="coupon-art">{rewardArt[item.imageKey] ?? '🎁'}</div>
                   <div className="coupon-main">
                       <div className="coupon-name">
                           <h2>{item.rewardName}</h2>
-                          <span>
-                              {item.deliveryType === 'Digital' && item.status === 'Fulfilled' ? 'Teslim Edildi'
-                              : item.status === 'Created' ? 'Aktif'
-                              : item.status === 'Fulfilled' ? 'Kullanıldı'
-                              : 'İptal'}
-                          </span>
+                          <span className={isCouponExpired(item) ? 'expired' : ''}>{couponStatusLabel(item)}</span>
                       </div>
                       <p>{item.deliveryType === 'Digital' ? 'Dijital Kod' : 'Bayiden Teslim'} · {numberFormatter.format(item.pointsSpent)} puan</p>
                       <code>{item.fulfillmentCode}</code>
@@ -650,12 +654,17 @@ function Coupons({ craftsmanId, back }: { craftsmanId: string; back: () => void 
                   </div>
 
                   <div className="coupon-meta-info">
-                      <p><strong>Durum:</strong> {selectedCoupon.status === 'Created' ? 'Kullanıma Hazır' : selectedCoupon.status === 'Fulfilled' ? 'Kullanıldı / Teslim Edildi' : 'İptal Edildi'}</p>
+                      <p><strong>Durum:</strong> {couponStatusLabel(selectedCoupon)}</p>
                       <p><strong>Puan Bedeli:</strong> {numberFormatter.format(selectedCoupon.pointsSpent)} Puan</p>
                       <p><strong>Alınma Tarihi:</strong> {dateFormatter.format(new Date(selectedCoupon.createdAtUtc))}</p>
                       {selectedCoupon.fulfilledAtUtc && (
                           <p><strong>Teslim Tarihi:</strong> {dateFormatter.format(new Date(selectedCoupon.fulfilledAtUtc))}</p>
                       )}
+                      {selectedCoupon.expiresAtUtc && (
+                          <p className={isCouponExpired(selectedCoupon) ? 'coupon-expired-note' : ''}><strong>Son Kullanım:</strong> {dateFormatter.format(new Date(selectedCoupon.expiresAtUtc))}{isCouponExpired(selectedCoupon) ? ' (Süresi doldu)' : ''}</p>
+                      )}
+                      {selectedCoupon.fulfilledByDealer && <p><strong>Teslim Eden Bayi:</strong> {selectedCoupon.fulfilledByDealer}</p>}
+                      {selectedCoupon.fulfilledByDealerEmployee && <p><strong>Görevli:</strong> {selectedCoupon.fulfilledByDealerEmployee}</p>}
                   </div>
 
                   <div className="dialog-actions">
