@@ -3,6 +3,7 @@ namespace UstaEkosistemi.Api.Domain;
 public sealed class ProductCode
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public byte[] RowVersion { get; set; } = [];
     public Guid ProductId { get; set; }
     public required string CodeHash { get; set; }
     public ProductCodeStatus Status { get; set; } = ProductCodeStatus.Available;

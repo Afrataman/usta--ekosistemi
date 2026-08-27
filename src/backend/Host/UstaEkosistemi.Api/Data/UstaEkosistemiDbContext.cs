@@ -66,6 +66,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         {
             entity.ToTable("ProductCodes");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
             entity.Property(x => x.CodeHash).HasMaxLength(64).IsFixedLength().IsRequired();
             entity.HasIndex(x => x.CodeHash).IsUnique();
             entity.HasIndex(x => x.RedemptionRequestId).IsUnique().HasFilter("[RedemptionRequestId] IS NOT NULL");

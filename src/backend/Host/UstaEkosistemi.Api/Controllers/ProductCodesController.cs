@@ -82,7 +82,14 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
         var qualifyingPoints = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == request.CraftsmanId && x.Amount > 0).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
         var loyaltyConfig = await dbContext.LoyaltyConfigurations.AsNoTracking().SingleAsync(x => x.Id == LoyaltyConfiguration.DefaultId, cancellationToken);
         craftsman.Level = LoyaltyPolicy.GetLevel(qualifyingPoints + earnedPoints, loyaltyConfig.SilverThreshold, loyaltyConfig.GoldThreshold);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { message = "Bu ürün kodu başka bir cihaz tarafından aynı anda kullanıldı. Puan yalnızca bir kez verildi." });
+        }
         await transaction.CommitAsync(cancellationToken);
 
         var balance = await dbContext.PointLedgerEntries
