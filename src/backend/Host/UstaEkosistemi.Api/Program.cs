@@ -80,7 +80,7 @@ app.UseAuthorization();
 app.UseMiddleware<AdminAuthenticationMiddleware>();
 app.UseMiddleware<CraftsmanAuthenticationMiddleware>();
 
-app.MapControllers();
+app.MapControllers().RequireRateLimiting("api");
 app.MapGet("/api/health", async (UstaEkosistemiDbContext dbContext, CancellationToken cancellationToken) =>
 {
     try
