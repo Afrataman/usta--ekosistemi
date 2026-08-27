@@ -115,9 +115,17 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   const [cameraState, setCameraState] = useState<'starting' | 'active' | 'unavailable' | 'denied'>('starting')
   const [cameraAttempt, setCameraAttempt] = useState(0)
   const [pendingCount, setPendingCount] = useState(0)
+  const [online, setOnline] = useState(navigator.onLine)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const scanningRef = useRef(false)
+
+  useEffect(() => {
+    const updateOnlineState = () => setOnline(navigator.onLine)
+    window.addEventListener('online', updateOnlineState)
+    window.addEventListener('offline', updateOnlineState)
+    return () => { window.removeEventListener('online', updateOnlineState); window.removeEventListener('offline', updateOnlineState) }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -314,7 +322,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
           <p>♢ Her ürün kodu yalnızca bir kez kullanılabilir.</p>
       </section>
 
-      {(pendingCount > 0 || !navigator.onLine) && (
+      {(pendingCount > 0 || !online) && (
           <div className="connection-warning" role="alert">
               ⌁ <strong>{pendingCount > 0 ? `${pendingCount} işlem bekliyor — bağlantı gelince otomatik denenecek` : 'İnternet yok — yeni okutulan kodlar kuyruğa alınacak'}</strong>
           </div>
