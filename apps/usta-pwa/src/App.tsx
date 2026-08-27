@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { confirmCraftsmanPhoneChange, createAdminCampaign, createAdminPointAdjustment, createAdminProduct, createAdminReward, createDealerSale, createMembershipPass, createSupportRequest, exportAdminLoyaltyReport, fulfillDealerCoupon, generateAdminProductCodes, getAdminCampaigns, getAdminCraftsmen, getAdminDealers, getAdminLoyaltyReport, getAdminLoyaltyRules, getAdminOverview, getAdminProducts, getAdminRewards, getAdminRiskCases, getAdminSupportRequests, getAdminTransactions, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getDealerDashboard, getNotifications, getReportExportAudits, getRewardRedemptions, getRewards, getSupportRequests, getWallet, loginAdmin, loginDealer, logoutAdmin, logoutCraftsman, logoutDealer, markAllNotificationsRead, markNotificationRead, redeemProductCode, redeemReward, replyAdminSupportRequest, replySupportRequest, reportDealerRisk, requestCraftsmanPhoneChange, requestOtpCode, returnDealerProduct, setAdminCampaignActive, setAdminEntityActive, setAdminProductActive, updateAdminLoyaltyRules, updateAdminReward, updateAdminRiskStatus, updateAdminSupportRequest, updateCraftsmanProfile, verifyDealerCoupon, verifyMembershipPass, verifyOtpCode, type AdminLoginResult, type AdminCampaign, type AdminCraftsman, type AdminDealer, type AdminLoyaltyReport, type AdminOverview, type AdminProduct, type AdminReward, type AdminRiskCase, type AdminSupportRequest, type AdminTransactionResponse, type Campaign, type CraftsmanNotification, type CraftsmanProfile, type Dashboard, type DealerCoupon, type DealerDashboard, type DealerLoginResult, type DealerSaleResult, type MembershipPassResult, type LoyaltyRules, type ProductReturnResult, type ReportExportAudit, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
 import { createAdminDealerEmployee, getAdminDealerEmployees, resetAdminDealerEmployeePin, setAdminDealerEmployeeActive, type AdminDealerEmployee } from './api'
 import { getAdminNotificationAudience, getAdminNotificationHistory, sendAdminTargetedNotification, type AdminNotificationHistory } from './api'
@@ -1039,21 +1039,27 @@ function AdminManagementPage({ kind }: { kind: 'craftsmen' | 'dealers' }) {
   const [dealers, setDealers] = useState<AdminDealer[]>([])
   const [message, setMessage] = useState('')
   const [busyId, setBusyId] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [reloadKey, setReloadKey] = useState(0)
 
   // YENİ EKLENEN: Arama State'i
   const [searchTerm, setSearchTerm] = useState('')
 
-  async function load() {
-      if (kind === 'craftsmen') setCraftsmen(await getAdminCraftsmen())
-      else setDealers(await getAdminDealers())
-  }
+  const load = useCallback(async () => {
+      setLoading(true); setMessage('')
+      try {
+        if (kind === 'craftsmen') setCraftsmen(await getAdminCraftsmen())
+        else setDealers(await getAdminDealers())
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Kayıtlar yüklenemedi.')
+      } finally { setLoading(false) }
+  }, [kind])
 
   useEffect(() => {
       // Sayfa değiştiğinde aramayı temizle
       setSearchTerm('')
-      const request = kind === 'craftsmen' ? getAdminCraftsmen().then(setCraftsmen) : getAdminDealers().then(setDealers)
-      request.catch(() => setMessage('Kayıtlar yüklenemedi.'))
-  }, [kind])
+      void load()
+  }, [kind, load, reloadKey])
 
   async function toggle(id: string, active: boolean) {
       setBusyId(id); setMessage('');
@@ -1112,7 +1118,8 @@ function AdminManagementPage({ kind }: { kind: 'craftsmen' | 'dealers' }) {
                 )}
             </div>
 
-            {message && <p className="admin-message">{message}</p>}
+            {loading && <div className="coupon-state" aria-live="polite">Kayıtlar yükleniyor…</div>}
+            {message && !loading && <div className="screen-error" role="alert"><span>{message}</span><button onClick={() => setReloadKey((value) => value + 1)} type="button">Tekrar dene</button></div>}
 
             <section className="management-list">
                 {kind === 'craftsmen' ? filteredCraftsmen.map((item) => (
@@ -1140,7 +1147,7 @@ function AdminManagementPage({ kind }: { kind: 'craftsmen' | 'dealers' }) {
                 ))}
 
                 {/* Arama sonucu bulunamazsa gösterilecek mesaj */}
-                {(kind === 'craftsmen' ? filteredCraftsmen.length : filteredDealers.length) === 0 && (
+                {!loading && (kind === 'craftsmen' ? filteredCraftsmen.length : filteredDealers.length) === 0 && (
                     <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', width: '100%' }}>
                         <span style={{ fontSize: '24px', display: 'block', marginBottom: '10px' }}>🔍</span>
                         <p>"{searchTerm}" aramasına uygun {kind === 'craftsmen' ? 'usta' : 'bayi'} bulunamadı.</p>
