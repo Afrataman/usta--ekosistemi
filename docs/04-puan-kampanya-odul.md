@@ -105,9 +105,10 @@ Bir kampanya geliştirici müdahalesi olmadan şu alanlarla tanımlanabilmelidir
 
 ## 5. Kural çakışması
 
-MVP'de varsayılan öneri: Aynı işleme uyan kampanyalar kendiliğinden toplanmaz. Her kampanya
-`birleşebilir` veya `birleşemez` olarak açıkça işaretlenir. Birleşemeyenler arasında en yüksek
-öncelik; eşitse kullanıcıya en fazla puan veren kural uygulanır ve sonuç önizlemede gösterilir.
+MVP'de varsayılan kural: Aynı işleme uyan kampanyalar kendiliğinden toplanmaz. Birleşemeyenler
+arasında yönetici tarafından verilen en düşük `DisplayOrder` (öncelik) uygulanır; öncelik eşitse
+kullanıcıya en fazla puan veren çarpan seçilir; son eşitlikte kampanya kimliği kullanılır. Seçilen
+kampanya ve çarpan işlem kaydında gösterilir.
 
 Bu kural iş birimi tarafından onaylanmalıdır. Gizli veya belirsiz sıralama, maliyet ve kullanıcı
 itirazı doğurur.

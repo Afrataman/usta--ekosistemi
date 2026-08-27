@@ -60,7 +60,13 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
         productCode.RedemptionRequestId = request.RequestId;
 
         var now = DateTimeOffset.UtcNow;
-        var multiplier = await dbContext.Campaigns.Where(x => x.IsActive && x.StartsAtUtc <= now && x.EndsAtUtc >= now && (x.ProductId == null || x.ProductId == productCode.ProductId)).MaxAsync(x => (decimal?)x.PointMultiplier, cancellationToken) ?? 1;
+        var campaign = CampaignSelectionPolicy.SelectBest(
+            await dbContext.Campaigns
+                .Where(x => x.IsActive && x.StartsAtUtc <= now && x.EndsAtUtc > now && (x.ProductId == null || x.ProductId == productCode.ProductId))
+                .ToListAsync(cancellationToken),
+            productCode.ProductId,
+            now);
+        var multiplier = campaign?.PointMultiplier ?? 1;
         var earnedPoints = decimal.ToInt32(decimal.Floor(productCode.Product.BasePoints * Math.Max(1, multiplier)));
         var ledgerEntry = new PointLedgerEntry
         {
@@ -69,7 +75,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
             TransactionType = PointTransactionType.ProductCodeEarned,
             ReferenceType = nameof(ProductCode),
             ReferenceId = productCode.Id,
-            Description = multiplier > 1 ? $"{productCode.Product.Name} · {multiplier:0.##}X kampanya puanı" : $"{productCode.Product.Name} ürün kodu puanı"
+            Description = campaign is not null ? $"{productCode.Product.Name} · {campaign.Title} · {multiplier:0.##}X kampanya puanı" : $"{productCode.Product.Name} ürün kodu puanı"
         };
         dbContext.PointLedgerEntries.Add(ledgerEntry);
         dbContext.QueueCraftsmanNotification(request.CraftsmanId, "PointsEarned", $"{earnedPoints:N0} puan kazandınız", $"{productCode.Product.Name} ürün kodu başarıyla kullanıldı.", nameof(ProductCode), productCode.Id);
@@ -83,7 +89,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
             .Where(x => x.CraftsmanId == request.CraftsmanId)
             .SumAsync(x => x.Amount, cancellationToken);
 
-        return Ok(new { alreadyProcessed = false, earnedPoints = ledgerEntry.Amount, balance, product = productCode.Product.Name, campaignMultiplier = multiplier, level = craftsman.Level.ToString(), productCode.RedeemedAtUtc });
+        return Ok(new { alreadyProcessed = false, earnedPoints = ledgerEntry.Amount, balance, product = productCode.Product.Name, campaignId = campaign?.Id, campaignMultiplier = multiplier, level = craftsman.Level.ToString(), productCode.RedeemedAtUtc });
     }
 
     private bool TryGetAuthenticatedCraftsman(out Guid craftsmanId)
