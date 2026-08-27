@@ -98,6 +98,23 @@ public sealed class CraftsmenController(UstaEkosistemiDbContext dbContext, IWebH
         return Ok(new { profile.Id, profile.FullName, profile.PhoneNumber, profile.City, profile.level, profile.CampaignNotificationsEnabled, profile.SmsNotificationsEnabled, profile.CreatedAtUtc, privacyNoticeAcknowledged = latest(CraftsmanConsentType.PrivacyNotice), explicitConsent = latest(CraftsmanConsentType.ExplicitConsent), commercialCommunicationConsent = latest(CraftsmanConsentType.CommercialCommunication), consentVersion = version });
     }
 
+    [HttpGet("{id:guid}/consents")]
+    public async Task<IActionResult> GetConsentHistory(Guid id, CancellationToken cancellationToken)
+    {
+        if (!await dbContext.Craftsmen.AnyAsync(x => x.Id == id, cancellationToken))
+        {
+            return NotFound(new { message = "Usta bulunamadı." });
+        }
+
+        var history = await dbContext.CraftsmanConsents.AsNoTracking()
+            .Where(x => x.CraftsmanId == id)
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .Select(x => new { x.Id, type = x.Type.ToString(), x.DocumentVersion, x.Granted, x.RecordedAtUtc })
+            .ToListAsync(cancellationToken);
+
+        return Ok(history);
+    }
+
     [HttpGet("{id:guid}/dashboard")]
     public async Task<IActionResult> GetDashboard(Guid id, CancellationToken cancellationToken)
     {

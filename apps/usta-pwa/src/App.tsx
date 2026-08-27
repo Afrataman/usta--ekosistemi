@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { confirmCraftsmanPhoneChange, createAdminCampaign, createAdminPointAdjustment, createAdminProduct, createAdminReward, createDealerSale, createMembershipPass, createSupportRequest, exportAdminLoyaltyReport, fulfillDealerCoupon, generateAdminProductCodes, getAdminCampaigns, getAdminCraftsmen, getAdminDealers, getAdminLoyaltyReport, getAdminLoyaltyRules, getAdminOverview, getAdminProducts, getAdminRewards, getAdminRiskCases, getAdminSupportRequests, getAdminTransactions, getCampaigns, getCraftsmanDashboard, getCraftsmanProfile, getDealerDashboard, getNotifications, getReportExportAudits, getRewardRedemptions, getRewards, getSupportRequests, getWallet, loginAdmin, loginDealer, logoutAdmin, logoutCraftsman, logoutDealer, markAllNotificationsRead, markNotificationRead, redeemProductCode, redeemReward, replyAdminSupportRequest, replySupportRequest, reportDealerRisk, requestCraftsmanPhoneChange, requestOtpCode, returnDealerProduct, setAdminCampaignActive, setAdminEntityActive, updateAdminLoyaltyRules, updateAdminReward, updateAdminRiskStatus, updateAdminSupportRequest, updateCraftsmanProfile, verifyDealerCoupon, verifyMembershipPass, verifyOtpCode, type AdminLoginResult, type AdminCampaign, type AdminCraftsman, type AdminDealer, type AdminLoyaltyReport, type AdminOverview, type AdminProduct, type AdminReward, type AdminRiskCase, type AdminSupportRequest, type AdminTransactionResponse, type Campaign, type CraftsmanNotification, type CraftsmanProfile, type Dashboard, type DealerCoupon, type DealerDashboard, type DealerLoginResult, type DealerSaleResult, type MembershipPassResult, type LoyaltyRules, type ProductReturnResult, type ReportExportAudit, type Reward, type RewardRedemption, type RewardRedemptionResult, type SupportItem, type Wallet as WalletData } from './api'
 import { createAdminDealerEmployee, getAdminDealerEmployees, resetAdminDealerEmployeePin, setAdminDealerEmployeeActive, type AdminDealerEmployee } from './api'
 import { getAdminNotificationAudience, getAdminNotificationHistory, sendAdminTargetedNotification, type AdminNotificationHistory } from './api'
+import { getCraftsmanConsentHistory, type CraftsmanConsentHistoryItem } from './api'
 import { importAdminProductCodes, validateAdminProductCodes, type ProductCodeValidationResult } from './api'
 import { getDealerActivity, type DealerActivityResponse } from './api'
 import { getAdminCoupons, type AdminCouponResponse } from './api'
@@ -691,6 +692,9 @@ function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; on
   const [profile, setProfile] = useState<CraftsmanProfile | null>(null)
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [consentHistory, setConsentHistory] = useState<CraftsmanConsentHistoryItem[]>([])
+  const [consentHistoryLoading, setConsentHistoryLoading] = useState(true)
+  const [consentHistoryError, setConsentHistoryError] = useState('')
   const [membershipPass, setMembershipPass] = useState<MembershipPassResult | null>(null), [membershipQr, setMembershipQr] = useState('')
   const [newPhone, setNewPhone] = useState(''), [phoneChallengeId, setPhoneChallengeId] = useState(''), [phoneCode, setPhoneCode] = useState(''), [developmentPhoneCode, setDevelopmentPhoneCode] = useState(''), [phoneBusy, setPhoneBusy] = useState(false)
 
@@ -698,6 +702,16 @@ function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; on
     if (!craftsmanId) return
     const controller = new AbortController()
     getCraftsmanProfile(craftsmanId, controller.signal).then(setProfile).catch(() => setMessage({ kind: 'error', text: 'Profil yüklenemedi. Backend bağlantısını kontrol edin.' }))
+    return () => controller.abort()
+  }, [craftsmanId])
+
+  useEffect(() => {
+    if (!craftsmanId) { setConsentHistoryLoading(false); return }
+    const controller = new AbortController()
+    getCraftsmanConsentHistory(craftsmanId, controller.signal)
+      .then(setConsentHistory)
+      .catch((reason: unknown) => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setConsentHistoryError('Onay geçmişi yüklenemedi.') })
+      .finally(() => setConsentHistoryLoading(false))
     return () => controller.abort()
   }, [craftsmanId])
 
@@ -748,6 +762,7 @@ function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; on
 
   if (!profile) return <div className="profile-loading" aria-live="polite">{message?.text ?? 'Profil yükleniyor…'}</div>
   const maskedPhone = `${profile.phoneNumber.slice(0, 4)} *** ** ${profile.phoneNumber.slice(-2)}`
+  const consentTypeNames: Record<CraftsmanConsentHistoryItem['type'], string> = { PrivacyNotice: 'Aydınlatma Metni (KVKK)', ExplicitConsent: 'Açık Rıza Beyanı', CommercialCommunication: 'Ticari Elektronik İleti' }
 
   return (
     <>
@@ -831,6 +846,13 @@ function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; on
             <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--text-muted)' }}>
                 Onaylanan Metin Sürümü: <strong>{profile.consentVersion ?? 'Bilinmiyor'}</strong>
             </div>
+            <details className="consent-history-details">
+                <summary>Geçmiş kayıtlarını göster</summary>
+                {consentHistoryLoading && <p aria-live="polite">Geçmiş yükleniyor…</p>}
+                {consentHistoryError && <p className="consent-history-error" role="alert">{consentHistoryError}</p>}
+                {!consentHistoryLoading && !consentHistoryError && consentHistory.length === 0 && <p>Henüz geçmiş onay kaydı bulunmuyor.</p>}
+                {!consentHistoryLoading && consentHistory.map((item) => <div className="consent-history-item" key={item.id}><span><strong>{consentTypeNames[item.type] ?? item.type}</strong><small>{item.documentVersion} · {new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.recordedAtUtc))}</small></span><b className={item.granted ? 'granted' : 'revoked'}>{item.granted ? 'Verildi' : 'Geri çekildi'}</b></div>)}
+            </details>
         </section>
 
         <section className="membership-card">

@@ -165,6 +165,13 @@ export async function getCraftsmanProfile(craftsmanId: string, signal?: AbortSig
   return response.json() as Promise<CraftsmanProfile>
 }
 
+export type CraftsmanConsentHistoryItem = { id: string; type: 'PrivacyNotice' | 'ExplicitConsent' | 'CommercialCommunication'; documentVersion: string; granted: boolean; recordedAtUtc: string }
+export async function getCraftsmanConsentHistory(craftsmanId: string, signal?: AbortSignal): Promise<CraftsmanConsentHistoryItem[]> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/consents`, { signal })
+  if (!response.ok) throw new Error('Onay geçmişi alınamadı.')
+  return response.json() as Promise<CraftsmanConsentHistoryItem[]>
+}
+
 export async function updateCraftsmanProfile(craftsmanId: string, profile: UpdateCraftsmanProfile): Promise<void> {
   const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile),
