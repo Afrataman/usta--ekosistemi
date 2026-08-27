@@ -36,5 +36,7 @@ jobs:
         working-directory: apps/usta-pwa
       - run: npm run build
         working-directory: apps/usta-pwa
+      - run: npm run lint
+        working-directory: apps/usta-pwa
       - run: npm audit --omit=dev --audit-level=high
         working-directory: apps/usta-pwa
