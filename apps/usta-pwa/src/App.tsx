@@ -109,6 +109,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
   const [cameraState, setCameraState] = useState<'starting' | 'active' | 'unavailable' | 'denied'>('starting')
+  const [cameraAttempt, setCameraAttempt] = useState(0)
   const [pendingCount, setPendingCount] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -163,7 +164,17 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
     }
     void startCamera()
     return () => { cancelled = true; streamRef.current?.getTracks().forEach((track) => track.stop()) }
-  }, [])
+  }, [cameraAttempt])
+
+  function retryCamera() {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+    scanningRef.current = false
+    setManualEntryOpen(false)
+    setResult(null)
+    setCameraState('starting')
+    setCameraAttempt((attempt) => attempt + 1)
+  }
 
   useEffect(() => {
     let active = true
@@ -238,6 +249,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
                 <span className="camera-error-icon">⊘</span>
                 <strong>Kamera İzni Gerekli</strong>
                 <small>Kameranızı kullanabilmemiz için tarayıcı ayarlarından izin vermelisiniz.</small>
+                <button className="camera-retry" onClick={retryCamera} type="button">Tekrar Dene</button>
             </div>
         )}
 
@@ -246,6 +258,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
                 <span className="camera-error-icon">⚠</span>
                 <strong>Kamera Bulunamadı</strong>
                 <small>Cihazınızda desteklenen bir kamera bulunamadı veya şu an kullanılamıyor.</small>
+                <button className="camera-retry" onClick={retryCamera} type="button">Tekrar Dene</button>
             </div>
         )}
       </div>

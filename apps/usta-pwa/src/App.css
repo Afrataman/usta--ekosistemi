@@ -76,6 +76,7 @@ button:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
 .camera-error-icon { color: #ff8a8a; font-size: 30px; line-height: 1; }
 .camera-error-box strong { color: #fff; font-size: 16px; }
 .camera-error-box small { color: #a9c0ca; font-size: 12px; line-height: 1.45; }
+.camera-retry { margin-top: 4px; padding: 8px 16px; border: 1px solid var(--cyan); border-radius: 8px; color: #04131f; background: var(--cyan); font-size: 11px; font-weight: 700; }
 .corner { position:absolute; width:31px; height:31px; border-color:var(--cyan); border-style:solid; }
 .corner.tl { top:0; left:12px; border-width:4px 0 0 4px; border-radius:9px 0 0; }.corner.tr { top:0; right:12px; border-width:4px 4px 0 0; border-radius:0 9px 0 0; }.corner.bl { bottom:0; left:12px; border-width:0 0 4px 4px; border-radius:0 0 0 9px; }.corner.br { right:12px; bottom:0; border-width:0 4px 4px 0; border-radius:0 0 9px; }
 .product-box { position:relative; width:195px; height:185px; transform:skewY(-5deg); border:1px solid #71808b; background:linear-gradient(115deg,#0e2a3e,#071523); box-shadow:0 24px 35px rgba(0,0,0,.45); }
