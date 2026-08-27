@@ -872,12 +872,51 @@ function Campaigns({ back }: { back: () => void }) {
 }
 
 function Notifications({ craftsmanId, back }: { craftsmanId: string; back: () => void }) {
-  const [items, setItems] = useState<CraftsmanNotification[]>([]); const [unreadCount, setUnreadCount] = useState(0); const [error, setError] = useState('')
-  useEffect(() => { if (!craftsmanId) return; const controller = new AbortController(); getNotifications(craftsmanId, controller.signal).then((inbox) => { setItems(inbox.items); setUnreadCount(inbox.unreadCount) }).catch(() => setError('Bildirimler yüklenemedi.')); return () => controller.abort() }, [craftsmanId])
-  async function read(item: CraftsmanNotification) { if (item.readAtUtc) return; await markNotificationRead(craftsmanId, item.id); setItems((current) => current.map((x) => x.id === item.id ? { ...x, readAtUtc: new Date().toISOString() } : x)); setUnreadCount((count) => Math.max(0, count - 1)) }
-  async function readAll() { await markAllNotificationsRead(craftsmanId); const now = new Date().toISOString(); setItems((current) => current.map((x) => ({ ...x, readAtUtc: x.readAtUtc ?? now }))); setUnreadCount(0) }
+  const [items, setItems] = useState<CraftsmanNotification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [filter, setFilter] = useState<'all' | 'unread'>('all')
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState('')
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!craftsmanId) { setLoading(false); return }
+    const controller = new AbortController()
+    setLoading(true); setError('')
+    getNotifications(craftsmanId, controller.signal)
+      .then((inbox) => { setItems(inbox.items); setUnreadCount(inbox.unreadCount) })
+      .catch((reason: unknown) => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setError('Bildirimler yüklenemedi.') })
+      .finally(() => setLoading(false))
+    return () => controller.abort()
+  }, [craftsmanId])
+  const visibleItems = filter === 'unread' ? items.filter((item) => !item.readAtUtc) : items
+  async function read(item: CraftsmanNotification) {
+    if (item.readAtUtc || busyId) return
+    setBusyId(item.id); setError('')
+    try {
+      await markNotificationRead(craftsmanId, item.id)
+      setItems((current) => current.map((x) => x.id === item.id ? { ...x, readAtUtc: new Date().toISOString() } : x))
+      setUnreadCount((count) => Math.max(0, count - 1))
+    } catch { setError('Bildirim okundu olarak işaretlenemedi.') } finally { setBusyId('') }
+  }
+  async function readAll() {
+    if (unreadCount === 0 || busyId) return
+    setBusyId('all'); setError('')
+    try {
+      await markAllNotificationsRead(craftsmanId)
+      const now = new Date().toISOString()
+      setItems((current) => current.map((x) => ({ ...x, readAtUtc: x.readAtUtc ?? now })))
+      setUnreadCount(0)
+    } catch { setError('Bildirimler okundu olarak işaretlenemedi.') } finally { setBusyId('') }
+  }
   const icons: Record<string, string> = { Welcome: '★', Campaign: '◇', PointsEarned: '+', Reward: '🎁', Delivery: '✓', Return: '↩', Support: '♧' }
-  return <><header className="page-header simple-header"><button onClick={back} type="button">‹</button><h1>Bildirimler {unreadCount > 0 && <small>({unreadCount})</small>}</h1><button disabled={unreadCount === 0} onClick={readAll} type="button">Tümünü oku</button></header>{error && <p className="screen-error">{error}</p>}<section className="notification-list">{items.map((item) => <article className={item.readAtUtc ? 'read' : 'unread'} key={item.id} onClick={() => read(item)}><span>{icons[item.type] ?? '◇'}</span><div><b>{item.title}</b><p>{item.message}</p><small>{dateFormatter.format(new Date(item.createdAtUtc))}{!item.readAtUtc && ' · Yeni'}</small></div></article>)}</section>{!error && items.length === 0 && <div className="coupon-state">Henüz işlem bildirimi bulunmuyor.</div>}</>
+  return <>
+    <header className="page-header simple-header"><button onClick={back} type="button" aria-label="Geri dön">‹</button><h1>Bildirimler {unreadCount > 0 && <small>({unreadCount} yeni)</small>}</h1><button disabled={unreadCount === 0 || busyId !== ''} onClick={() => void readAll()} type="button">{busyId === 'all' ? 'İşleniyor…' : 'Tümünü oku'}</button></header>
+    <div className="notification-filters" role="group" aria-label="Bildirim filtresi"><button className={filter === 'all' ? 'selected' : ''} aria-pressed={filter === 'all'} onClick={() => setFilter('all')} type="button">Tümü ({items.length})</button><button className={filter === 'unread' ? 'selected' : ''} aria-pressed={filter === 'unread'} onClick={() => setFilter('unread')} type="button">Okunmamış ({unreadCount})</button></div>
+    {error && <p className="screen-error" role="alert">{error}</p>}
+    {loading && <div className="coupon-state" aria-live="polite">Bildirimler yükleniyor…</div>}
+    {!loading && <section className="notification-list">{visibleItems.map((item) => <article className={item.readAtUtc ? 'read' : 'unread'} key={item.id} onClick={() => void read(item)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void read(item) } }} role="button" tabIndex={0} aria-label={`${item.title}, ${item.readAtUtc ? 'okundu' : 'okunmadı'}`}><span>{icons[item.type] ?? '◇'}</span><div><b>{item.title}</b><p>{item.message}</p><small>{dateFormatter.format(new Date(item.createdAtUtc))}{!item.readAtUtc && ' · Yeni'}{item.readAtUtc && ' · Okundu'}</small></div></article>)}</section>}
+    {!loading && !error && visibleItems.length === 0 && <div className="coupon-state">{filter === 'unread' ? 'Okunmamış bildirimin yok.' : 'Henüz işlem bildirimi bulunmuyor.'}</div>}
+  </>
 }
 
 function SupportRequestCard({ item, craftsmanId, onChanged }: { item: SupportItem; craftsmanId: string; onChanged: () => Promise<void> }) {
