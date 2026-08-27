@@ -11,6 +11,7 @@ import { getAdminAudit, type AdminAuditResponse } from './api'
 import { decideAdminCampaignApproval, getAdminCampaignApprovals, type CampaignApproval } from './api'
 import { getAdminOutbox, retryAdminOutbox, type AdminOutboxResponse } from './api'
 import { ApiRequestError } from './api'
+import { authStore } from './authStore'
 import './App.css'
 import { clearPendingRedemptions, enqueueRedemption, getPendingRedemptions, removePendingRedemption } from './offlineQueue'
 import QRCode from 'qrcode'
@@ -984,7 +985,7 @@ function DealerRiskPage() { return <main className="dealer-shell"><header><div><
 
 function AdminLogin({ onAuthenticated }: { onAuthenticated: (profile: AdminLoginResult) => void }) {
   const [userName, setUserName] = useState('admin'), [password, setPassword] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false)
-  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await loginAdmin(userName, password); sessionStorage.setItem('admin-token', result.token); sessionStorage.setItem('admin-profile', JSON.stringify(result)); onAuthenticated(result) } catch (error) { setMessage(error instanceof Error ? error.message : 'Giriş yapılamadı.') } finally { setBusy(false) } }
+  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await loginAdmin(userName, password); authStore.setAdminToken(result.token); onAuthenticated(result) } catch (error) { setMessage(error instanceof Error ? error.message : 'Giriş yapılamadı.') } finally { setBusy(false) } }
   return <main className="admin-login"><div className="login-logo">⚒</div><span>USTA KULÜBÜ YÖNETİMİ</span><h1>Yönetici Girişi</h1><p>Kampanya, puan ve raporlama araçlarına yalnızca yetkili hesaplar erişebilir.</p><form onSubmit={submit}><label>Kullanıcı adı<input value={userName} onChange={(event) => setUserName(event.target.value)} autoComplete="username" required /></label><label>Parola<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" minLength={8} required /></label><small>Geliştirme hesabı: admin / Usta2026!</small>{message && <p>{message}</p>}<button disabled={busy} type="submit">{busy ? 'Doğrulanıyor…' : 'Yönetim Paneline Gir'}</button></form></main>
 }
 
@@ -995,7 +996,7 @@ function AdminRouter() {
 }
 
 function AdminPortal() {
-  const [profile, setProfile] = useState<AdminLoginResult | null>(() => { try { const saved = sessionStorage.getItem('admin-profile'); const parsed = saved ? JSON.parse(saved) as AdminLoginResult : null; return parsed && new Date(parsed.expiresAtUtc) > new Date() && sessionStorage.getItem('admin-token') ? parsed : null } catch { return null } })
+  const [profile, setProfile] = useState<AdminLoginResult | null>(null)
   if (!profile) return <AdminLogin onAuthenticated={setProfile} />
   const exit = async () => { await logoutAdmin(); setProfile(null) }
   return <><AdminRouter /><div className="admin-shortcuts"><a href="/admin/outbox">Teslim Kuyruğu</a><a href="/admin/audit">Denetim Kaydı</a><a href="/admin/dealer-onboarding">Yeni Bayi</a><a href="/admin/coupons">Kupon Takibi</a><a href="/admin/notifications">Bildirim Gönder</a><a href="/admin/dealer-employees">Bayi Çalışanları</a><a href="/admin/adjustments">± Puan Düzelt</a></div><button className="admin-logout" onClick={exit} type="button">{profile.user} · Çıkış</button></>
@@ -1795,12 +1796,12 @@ function DealerActivityPage() {
 
 function DealerLogin({ onAuthenticated }: { onAuthenticated: (profile: DealerLoginResult) => void }) {
   const [dealerCode, setDealerCode] = useState('YLV-001'), [pin, setPin] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false)
-  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await loginDealer(dealerCode, pin); sessionStorage.setItem('dealer-token', result.token); sessionStorage.setItem('dealer-profile', JSON.stringify(result)); onAuthenticated(result) } catch (error) { setMessage(error instanceof Error ? error.message : 'Giriş yapılamadı.') } finally { setBusy(false) } }
+  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await loginDealer(dealerCode, pin); authStore.setDealerToken(result.token); onAuthenticated(result) } catch (error) { setMessage(error instanceof Error ? error.message : 'Giriş yapılamadı.') } finally { setBusy(false) } }
   return <main className="dealer-login"><div className="login-logo">▣</div><span>BAYİ BAĞLANTISI</span><h1>Çalışan Girişi</h1><p>Kupon teslimi ve iade işlemleri yetkili çalışan oturumuyla yapılır.</p><form onSubmit={submit}><label>Bayi kodu<input value={dealerCode} onChange={(event) => setDealerCode(event.target.value.toUpperCase())} minLength={3} maxLength={30} required /></label><label>6 haneli çalışan kodu<input className="dealer-pin" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required /></label><small>Geliştirme girişi: YLV-001 / 123456</small>{message && <p>{message}</p>}<button disabled={busy} type="submit">{busy ? 'Doğrulanıyor…' : 'Güvenli Giriş'}</button></form></main>
 }
 
 function DealerPortal({ risk = false, history = false }: { risk?: boolean; history?: boolean }) {
-  const [profile, setProfile] = useState<DealerLoginResult | null>(() => { try { const saved = sessionStorage.getItem('dealer-profile'); const parsed = saved ? JSON.parse(saved) as DealerLoginResult : null; return parsed && new Date(parsed.expiresAtUtc) > new Date() && sessionStorage.getItem('dealer-token') ? parsed : null } catch { return null } })
+  const [profile, setProfile] = useState<DealerLoginResult | null>(null)
   if (!profile) return <DealerLogin onAuthenticated={setProfile} />
   const exit = async () => { await logoutDealer(); setProfile(null) }
   return <>{risk ? <DealerRiskPage /> : history ? <DealerActivityPage /> : <DealerApp />}<div className="dealer-shortcuts"><a href="/dealer">İşlemler</a><a href="/dealer/history">Geçmiş</a><a href="/dealer/risk">Şüpheli İşlem</a></div><button className="dealer-logout" onClick={exit} type="button">Oturumu Kapat</button></>
@@ -2223,7 +2224,7 @@ function DealerApp() {
 }
 
 function CraftsmanApp() {
-  const [craftsmanId, setCraftsmanId] = useState(() => { const expires = localStorage.getItem('usta-session-expires'); return localStorage.getItem('usta-token') && expires && new Date(expires) > new Date() ? localStorage.getItem('usta-craftsman-id') ?? '' : '' })
+  const [craftsmanId, setCraftsmanId] = useState(() => authStore.getCraftsmanToken() ? localStorage.getItem('usta-craftsman-id') ?? '' : '')
   const [needsProfile, setNeedsProfile] = useState(() => localStorage.getItem('usta-needs-profile') === 'true')
   const [screen, setScreen] = useState<Screen>('home')
   const [dashboard, setDashboard] = useState(cachedDashboard)
@@ -2252,9 +2253,9 @@ function CraftsmanApp() {
     setConnected(true)
   }
 
-  function authenticated(result: { craftsmanId: string; needsProfile: boolean; token: string; expiresAtUtc: string }) { localStorage.setItem('usta-craftsman-id', result.craftsmanId); localStorage.setItem('usta-needs-profile', String(result.needsProfile)); localStorage.setItem('usta-token', result.token); localStorage.setItem('usta-session-expires', result.expiresAtUtc); setCraftsmanId(result.craftsmanId); setNeedsProfile(result.needsProfile) }
+  function authenticated(result: { craftsmanId: string; needsProfile: boolean; token: string; expiresAtUtc: string }) { authStore.setCraftsmanToken(result.token); localStorage.setItem('usta-craftsman-id', result.craftsmanId); localStorage.setItem('usta-needs-profile', String(result.needsProfile)); setCraftsmanId(result.craftsmanId); setNeedsProfile(result.needsProfile) }
   function profileCompleted() { localStorage.removeItem('usta-needs-profile'); setNeedsProfile(false); void refreshDashboard() }
-  function logout() { void logoutCraftsman(); localStorage.removeItem('usta-craftsman-id'); localStorage.removeItem('usta-needs-profile'); localStorage.removeItem('usta-dashboard-cache'); localStorage.removeItem('usta-token'); localStorage.removeItem('usta-session-expires'); clearPendingRedemptions(); setCraftsmanId(''); setNeedsProfile(false); setDashboard(fallbackDashboard); setScreen('home') }
+  function logout() { void logoutCraftsman(); authStore.clearCraftsmanToken(); localStorage.removeItem('usta-craftsman-id'); localStorage.removeItem('usta-needs-profile'); localStorage.removeItem('usta-dashboard-cache'); localStorage.removeItem('usta-token'); localStorage.removeItem('usta-session-expires'); clearPendingRedemptions(); setCraftsmanId(''); setNeedsProfile(false); setDashboard(fallbackDashboard); setScreen('home') }
 
   if (!craftsmanId) return <Login onAuthenticated={authenticated} />
   if (needsProfile) return <ProfileSetup craftsmanId={craftsmanId} onCompleted={profileCompleted} />

@@ -1,3 +1,5 @@
+import { authStore } from './authStore'
+
 export type DashboardMovement = {
   description: string
   createdAtUtc: string
@@ -23,13 +25,13 @@ export class ApiRequestError extends Error {
   readonly status: number
   constructor(message: string, status: number) { super(message); this.name = 'ApiRequestError'; this.status = status }
 }
-const craftsmanHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('usta-token') ?? ''}` })
+const craftsmanHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.getCraftsmanToken()}` })
 const craftsmanFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, { ...init, headers: { ...craftsmanHeaders(), ...(init.headers as Record<string, string> | undefined) } })
-const adminHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('admin-token') ?? ''}` })
+const adminHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.getAdminToken()}` })
 const adminFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, { ...init, headers: { ...adminHeaders(), ...(init.headers as Record<string, string> | undefined) } })
 export type AdminLoginResult = { token: string; expiresAtUtc: string; user: string; role: string }
 export async function loginAdmin(userName: string, password: string): Promise<AdminLoginResult> { const response = await fetch(`${apiBaseUrl}/api/admin/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userName, password }) }); const body = await response.json() as AdminLoginResult & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Yönetici girişi başarısız.'); return body }
-export async function logoutAdmin(): Promise<void> { await fetch(`${apiBaseUrl}/api/admin/auth/logout`, { method: 'POST', headers: adminHeaders() }); sessionStorage.removeItem('admin-token'); sessionStorage.removeItem('admin-profile') }
+export async function logoutAdmin(): Promise<void> { await fetch(`${apiBaseUrl}/api/admin/auth/logout`, { method: 'POST', headers: adminHeaders() }); authStore.clearAdminToken() }
 
 export async function getDemoDashboard(signal?: AbortSignal): Promise<Dashboard> {
   const response = await fetch(`${apiBaseUrl}/api/demo/dashboard`, { signal })
@@ -287,11 +289,11 @@ export async function redeemProductCode(craftsmanId: string, code: string, reque
 }
 
 export type DealerCoupon = { id: string; fulfillmentCode: string; reward: string; craftsman: string; status: 'Created' | 'Fulfilled' | 'Cancelled'; expiresAtUtc: string | null; fulfilledAtUtc: string | null; fulfilledByDealerEmployeeId: string | null; alreadyProcessed: boolean }
-const dealerHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('dealer-token') ?? ''}` })
+const dealerHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.getDealerToken()}` })
 export type DealerLoginResult = { token: string; expiresAtUtc: string; employee: string; dealer: string }
 export type DealerDashboard = { dealer: string; today: { sales: number; amount: number }; month: { sales: number; amount: number; uniqueCraftsmen: number; fulfilledRewards: number; returns: number }; recentSales: Array<{ id: string; saleReference: string; totalAmount: number; craftsman: string; employee: string; createdAtUtc: string }> }
 export async function loginDealer(dealerCode: string, pin: string): Promise<DealerLoginResult> { const response = await fetch(`${apiBaseUrl}/api/dealer/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealerCode, pin }) }); const body = await response.json() as DealerLoginResult & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Bayi girişi başarısız.'); return body }
-export async function logoutDealer(): Promise<void> { await fetch(`${apiBaseUrl}/api/dealer/auth/logout`, { method: 'POST', headers: dealerHeaders() }); sessionStorage.removeItem('dealer-token'); sessionStorage.removeItem('dealer-profile') }
+export async function logoutDealer(): Promise<void> { await fetch(`${apiBaseUrl}/api/dealer/auth/logout`, { method: 'POST', headers: dealerHeaders() }); authStore.clearDealerToken() }
 export async function getDealerDashboard(signal?: AbortSignal): Promise<DealerDashboard> { const response = await fetch(`${apiBaseUrl}/api/dealer/dashboard`, { headers: dealerHeaders(), signal }); const body = await response.json() as DealerDashboard & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Bayi özeti alınamadı.'); return body }
 export type DealerActivity = { id: string; type: 'Sale' | 'Coupon' | 'Return' | 'Risk'; title: string; reference: string; craftsman: string; employee: string; detail: string; status: string; occurredAtUtc: string }
 export type DealerActivityResponse = { dealerId: string; rows: DealerActivity[]; summary: { sales: number; coupons: number; returns: number; risks: number } }
