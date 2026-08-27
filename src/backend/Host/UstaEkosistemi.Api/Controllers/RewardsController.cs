@@ -117,7 +117,23 @@ public sealed class RewardsController(UstaEkosistemiDbContext dbContext) : Contr
             reward.StockQuantity--;
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            foreach (var entry in dbContext.ChangeTracker.Entries().Where(x => x.State == EntityState.Added).ToList()) entry.State = EntityState.Detached;
+            var concurrent = await dbContext.RewardRedemptions.AsNoTracking().Include(x => x.Reward).SingleOrDefaultAsync(x => x.RedemptionRequestId == request.RequestId, cancellationToken);
+            if (concurrent is not null)
+            {
+                if (concurrent.CraftsmanId != request.CraftsmanId || concurrent.RewardId != rewardId) return Conflict(new { message = "İşlem anahtarı başka bir ödül işleminde kullanılmış." });
+                var concurrentBalance = await dbContext.PointLedgerEntries.Where(x => x.CraftsmanId == request.CraftsmanId).SumAsync(x => (int?)x.Amount, cancellationToken) ?? 0;
+                return Ok(ToResult(concurrent, concurrent.Reward, concurrentBalance, true));
+            }
+            throw;
+        }
         await transaction.CommitAsync(cancellationToken);
 
         return Ok(ToResult(redemption, reward, balance - reward.PointCost, false));

@@ -57,6 +57,24 @@ public sealed class IdempotentTransactionTests
     }
 
     [Fact]
+    public async Task Reusing_a_reward_request_for_another_reward_is_rejected()
+    {
+        await using var db = new UstaEkosistemiDbContext(options);
+        var craftsman = await SeedCraftsmanAsync(db, 2_000);
+        var first = new Reward { Name = "İlk ödül", Description = "Test ödülü", PointCost = 500, DeliveryType = RewardDeliveryType.Digital, ImageKey = "digital-gift" };
+        var second = new Reward { Name = "İkinci ödül", Description = "Test ödülü", PointCost = 500, DeliveryType = RewardDeliveryType.Digital, ImageKey = "digital-gift" };
+        db.Rewards.AddRange(first, second); await db.SaveChangesAsync();
+        var requestId = Guid.NewGuid();
+        var controller = RewardController(db, "craft-token");
+
+        Assert.IsType<OkObjectResult>(await controller.Redeem(first.Id, new RedeemRewardRequest(craftsman.Id, requestId), CancellationToken.None));
+        var result = await controller.Redeem(second.Id, new RedeemRewardRequest(craftsman.Id, requestId), CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(1, await db.RewardRedemptions.CountAsync());
+    }
+
+    [Fact]
     public async Task Returning_the_same_product_twice_reverses_points_once()
     {
         await using var db = new UstaEkosistemiDbContext(options);
