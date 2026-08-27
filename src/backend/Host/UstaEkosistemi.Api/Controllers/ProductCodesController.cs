@@ -20,6 +20,7 @@ public sealed class ProductCodesController(UstaEkosistemiDbContext dbContext, De
         {
             return ValidationProblem("Usta, işlem anahtarı ve ürün kodu zorunludur.");
         }
+        if (!ProductCodeFormat.IsValid(request.Code)) return ValidationProblem("Ürün kodu 8–80 karakter olmalı; yalnızca harf, rakam ve tek tire ayraçları içermelidir.");
         if (!TryGetAuthenticatedCraftsman(out var authenticatedId) || authenticatedId != request.CraftsmanId) return Unauthorized(new { message = "Usta oturumu geçersiz veya hesapla eşleşmiyor." });
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);

@@ -106,6 +106,7 @@ function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dash
 function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsmanId: string; onRedeemed: () => Promise<void> }) {
   const [manualEntryOpen, setManualEntryOpen] = useState(false)
   const [code, setCode] = useState('')
+  const [codeInputError, setCodeInputError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
   const [cameraState, setCameraState] = useState<'starting' | 'active' | 'unavailable' | 'denied'>('starting')
@@ -195,6 +196,7 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
   const handleCodeInput = (value: string) => {
       const sanitized = value.toUpperCase().replace(/[^A-Z0-9-]/g, '')
       setCode(sanitized)
+      setCodeInputError(sanitized !== value.toUpperCase() ? 'Kod yalnızca harf, rakam ve tire içerebilir.' : '')
   }
 
   async function submitCode(event: FormEvent<HTMLFormElement>) {
@@ -205,6 +207,10 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
     }
     if (code.length < 8) {
       setResult({ kind: 'error', message: 'Ürün kodu en az 8 karakter olmalıdır.' })
+      return
+    }
+    if (code.startsWith('-') || code.endsWith('-') || code.includes('--')) {
+      setResult({ kind: 'error', message: 'Kod biçimi geçersiz. Tireler yalnızca bölümler arasında kullanılabilir.' })
       return
     }
 
@@ -283,10 +289,11 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
                     required
                     autoComplete="off"
                 />
-                <button disabled={submitting || code.length < 8} type="submit">
+                <button disabled={submitting || code.length < 8 || Boolean(codeInputError)} type="submit">
                     {submitting ? 'İşleniyor…' : 'Kodu Kullan'}
                 </button>
             </div>
+            {codeInputError && <small className="manual-code-error">{codeInputError}</small>}
             {/* Erişilebilirlik için durumu sesli okuyucuya aktarıyoruz */}
             <div aria-live="assertive">
                 {result && <p className={`result-message ${result.kind}`}>{result.message}</p>}
