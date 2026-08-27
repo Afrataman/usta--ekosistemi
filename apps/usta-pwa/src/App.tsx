@@ -1231,14 +1231,20 @@ function AdminProductsPage() {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [busyId, setBusyId] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
-  async function load() {
-      setItems(await getAdminProducts())
-  }
+  const load = useCallback(async () => {
+      setLoading(true); setLoadError('')
+      try { setItems(await getAdminProducts()) }
+      catch (error) { setLoadError(error instanceof Error ? error.message : 'Ürünler yüklenemedi.') }
+      finally { setLoading(false) }
+  }, [])
 
   useEffect(() => {
-      getAdminProducts().then(setItems).catch(() => setMessage('Ürünler yüklenemedi.'))
-  }, [])
+      void load()
+  }, [load, reloadKey])
 
   async function create(event: FormEvent<HTMLFormElement>) {
       event.preventDefault(); setBusy(true); setMessage('')
@@ -1324,9 +1330,9 @@ function AdminProductsPage() {
                 <button disabled={busy} type="submit">{busy ? 'Ekleniyor...' : 'Ürünü Sisteme Ekle'}</button>
             </form>
 
-            <div aria-live="polite">
-                {message && <p className="admin-info-message" style={{ margin: '15px 0' }}>{message}</p>}
-            </div>
+            {loading && <div className="coupon-state" aria-live="polite">Ürünler yükleniyor…</div>}
+            {loadError && !loading && <div className="screen-error" role="alert"><span>{loadError}</span><button onClick={() => setReloadKey((value) => value + 1)} type="button">Tekrar dene</button></div>}
+            <div aria-live="polite">{message && !loadError && <p className="admin-info-message" style={{ margin: '15px 0' }}>{message}</p>}</div>
 
             {generated.length > 0 && (
                 <section className="generated-codes" style={{ border: '2px dashed var(--success)', background: 'var(--bg-card)' }}>
@@ -1386,7 +1392,7 @@ function AdminProductsPage() {
                         </div>
                     </article>
                 ))}
-                {items.length === 0 && <p style={{ textAlign: 'center', width: '100%', padding: '20px' }}>Henüz ürün tanımlanmamış.</p>}
+                {!loading && !loadError && items.length === 0 && <p style={{ textAlign: 'center', width: '100%', padding: '20px' }}>Henüz ürün tanımlanmamış.</p>}
             </section>
         </section>
     </main>
