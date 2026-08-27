@@ -3,6 +3,7 @@ namespace UstaEkosistemi.Api.Domain;
 public sealed class RewardRedemption
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public byte[] RowVersion { get; set; } = [];
     public Guid CraftsmanId { get; set; }
     public Guid RewardId { get; set; }
     public Guid? RedemptionRequestId { get; set; }

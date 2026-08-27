@@ -34,7 +34,17 @@ public sealed class DealerCouponsController(UstaEkosistemiDbContext dbContext, D
         if (coupon.ExpiresAtUtc.HasValue && coupon.ExpiresAtUtc <= DateTimeOffset.UtcNow) return Conflict(new { message = "Kuponun süresi dolmuş." });
         coupon.Status = RewardRedemptionStatus.Fulfilled; coupon.FulfilledAtUtc = DateTimeOffset.UtcNow; coupon.FulfilledByDealerEmployeeId = employee.Id;
         dbContext.QueueCraftsmanNotification(coupon.CraftsmanId, "Delivery", "Ödül teslim edildi", $"{coupon.Reward.Name} ödülünüz bayi tarafından teslim edildi.", nameof(RewardRedemption), coupon.Id);
-        await dbContext.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            foreach (var entry in dbContext.ChangeTracker.Entries().Where(x => x.State == EntityState.Added).ToList()) entry.State = EntityState.Detached;
+            return Conflict(new { message = "Bu kupon başka bir bayi tarafından aynı anda teslim edildi. İkinci kez teslim edilemez." });
+        }
+        await transaction.CommitAsync(cancellationToken);
         return Ok(ToResult(coupon, false));
     }
 

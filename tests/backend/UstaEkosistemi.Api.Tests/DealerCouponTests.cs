@@ -41,6 +41,20 @@ public sealed class DealerCouponTests
         Assert.Single(await db.OutboxMessages.Where(message => message.Type == "CraftsmanNotification").ToListAsync());
     }
 
+    [Fact]
+    public void Coupon_redemption_uses_rowversion_concurrency_control()
+    {
+        var options = new DbContextOptionsBuilder<UstaEkosistemiDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        using var db = new UstaEkosistemiDbContext(options);
+        var property = db.Model.FindEntityType(typeof(RewardRedemption))!.FindProperty(nameof(RewardRedemption.RowVersion));
+
+        Assert.NotNull(property);
+        Assert.True(property!.IsConcurrencyToken);
+        Assert.Equal(Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAddOrUpdate, property.ValueGenerated);
+    }
+
     private static DealerCouponsController ControllerFor(UstaEkosistemiDbContext db)
     {
         var controller = new DealerCouponsController(db, new DealerSessionAuthenticator(db));

@@ -108,6 +108,7 @@ public sealed class UstaEkosistemiDbContext(DbContextOptions<UstaEkosistemiDbCon
         {
             entity.ToTable("RewardRedemptions", table => table.HasCheckConstraint("CK_RewardRedemptions_PointsSpent", "[PointsSpent] > 0"));
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.Property(x => x.FulfillmentCode).HasMaxLength(30).IsRequired();
             entity.HasIndex(x => x.FulfillmentCode).IsUnique();
