@@ -1821,9 +1821,9 @@ function DealerPortal({ risk = false, history = false }: { risk?: boolean; histo
 }
 
 function DealerPerformance({ refreshKey }: { refreshKey: number }) {
-  const [data, setData] = useState<DealerDashboard | null>(null); const [error, setError] = useState('')
-  useEffect(() => { const controller = new AbortController(); getDealerDashboard(controller.signal).then(setData).catch(() => setError('Bayi özeti yüklenemedi.')); return () => controller.abort() }, [refreshKey])
-  if (error) return <p className="dealer-message">{error}</p>
+  const [data, setData] = useState<DealerDashboard | null>(null); const [error, setError] = useState(''); const [reloadKey, setReloadKey] = useState(0)
+  useEffect(() => { const controller = new AbortController(); setError(''); getDealerDashboard(controller.signal).then(setData).catch((reason: unknown) => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setError(reason instanceof Error ? reason.message : 'Bayi özeti yüklenemedi.') }); return () => controller.abort() }, [refreshKey, reloadKey])
+  if (error) return <div className="dealer-message dealer-performance-error" role="alert"><span>{error}</span><button onClick={() => setReloadKey((value) => value + 1)} type="button">Tekrar dene</button></div>
   if (!data) return <section className="dealer-performance loading">Bayi katkısı hesaplanıyor…</section>
   return <section className="dealer-performance"><div className="dealer-performance-title"><div><small>BU AYKİ KULÜP KATKISI</small><strong>{data.dealer}</strong></div><b>{numberFormatter.format(data.month.amount)} TL</b></div><div className="dealer-today-summary"><div><small>BUGÜN</small><strong>{numberFormatter.format(data.today.sales)} eşleşen satış</strong></div><b>{numberFormatter.format(data.today.amount)} TL</b></div><div className="dealer-performance-stats"><article><strong>{data.month.sales}</strong><span>Eşleşen satış</span></article><article><strong>{data.month.uniqueCraftsmen}</strong><span>Farklı usta</span></article><article><strong>{data.month.fulfilledRewards}</strong><span>Ödül teslimi</span></article><article><strong>{data.month.returns}</strong><span>İade işlemi</span></article></div>{data.recentSales.length > 0 && <details><summary>Son eşleşen satışlar</summary>{data.recentSales.map((sale) => <div key={sale.id}><span><b>{sale.saleReference}</b><small>{sale.craftsman}</small></span><strong>{numberFormatter.format(sale.totalAmount)} TL</strong></div>)}</details>}</section>
 }
