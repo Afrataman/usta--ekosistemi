@@ -100,7 +100,7 @@ function Home({ go, dashboard, connected }: { go: (screen: Screen) => void; dash
         <button onClick={() => go('campaigns')} type="button"><span>◇</span>Kampanyalar</button><button onClick={() => go('support')} type="button"><span>♧</span>Destek</button>
       </div>
 
-      <div className="section-row"><h2>Son Puan Hareketleri</h2><button type="button">Tümü ›</button></div>
+      <div className="section-row"><h2>Son Puan Hareketleri</h2><button onClick={() => go('wallet')} type="button" aria-label="Tüm puan hareketlerini görüntüle">Tümü ›</button></div>
       <div className="movement-list">{dashboard.movements.map((movement, index) => <div key={`${movement.createdAtUtc}-${index}`}><span>{movement.description}</span><time>{dateFormatter.format(new Date(movement.createdAtUtc))}</time><b className={movement.amount < 0 ? 'minus' : ''}>{movement.amount > 0 ? '+' : ''}{numberFormatter.format(movement.amount)}</b></div>)}</div>
     </>
   )
