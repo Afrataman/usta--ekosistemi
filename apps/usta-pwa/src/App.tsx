@@ -1261,9 +1261,14 @@ function AdminProductsPage() {
   }
 
   async function generate(item: AdminProduct) {
+      const requestedCount = counts[item.id] ?? 10
+      if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 1000) {
+          setMessage('Kod adedi 1 ile 1.000 arasında tam sayı olmalıdır.')
+          return
+      }
       setBusyId(item.id); setMessage(''); setGenerated([])
       try {
-          const result = await generateAdminProductCodes(item.id, counts[item.id] ?? 10)
+          const result = await generateAdminProductCodes(item.id, requestedCount)
           setGenerated(result.codes)
           setMessage(result.warning)
           await load()
@@ -1294,8 +1299,12 @@ function AdminProductsPage() {
   }
 
   async function copyCodes() {
-      await navigator.clipboard.writeText(generated.join('\n'))
-      setMessage('Kodlar panoya kopyalandı. Güvenli bir dosyaya kaydedin.')
+      try {
+          await navigator.clipboard.writeText(generated.join('\n'))
+          setMessage('Kodlar panoya kopyalandı. Güvenli bir dosyaya kaydedin.')
+      } catch {
+          setMessage('Kodlar panoya kopyalanamadı. Metin alanından seçip güvenli bir dosyaya kaydedin.')
+      }
   }
 
   return (
