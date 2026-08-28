@@ -2153,6 +2153,10 @@ function DealerApp() {
 
   async function returnProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const productCode = code.trim().toUpperCase()
+    const returnReason = reason.trim()
+    if (!/^[A-Z0-9-]{8,120}$/.test(productCode)) { setMessage('Ürün kodu 8–120 karakter olmalı; yalnızca harf, rakam ve tire içermelidir.'); return }
+    if (returnReason.length < 3 || returnReason.length > 200) { setMessage('İade nedeni 3 ile 200 karakter arasında olmalıdır.'); return }
 
     // GÜVENLİK KORUMASI: İade işlemi ustanın puanını düşüreceği için onay soruyoruz
     if (!window.confirm("Bu ürünün iadesini onaylıyor musunuz? Ustanın bu koddan kazandığı puan hesabından otomatik olarak düşülecektir.")) {
@@ -2161,7 +2165,7 @@ function DealerApp() {
 
     setBusy(true); setMessage(''); setReturnResult(null)
     try {
-        const result = await returnDealerProduct(code.trim().toUpperCase(), reason.trim())
+        const result = await returnDealerProduct(productCode, returnReason)
         setReturnResult(result)
         if (!result.alreadyProcessed) setActivityVersion((value) => value + 1)
         setMessage(result.alreadyProcessed ? 'Bu ürün daha önce iade edilmiş.' : '✓ Ürün iadesi ve puan geri alma tamamlandı.')
