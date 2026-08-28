@@ -760,9 +760,16 @@ function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; on
   }
 
   async function requestPhoneChange() {
+      const digits = newPhone.replace(/\D/g, '');
+      const normalizedPhone = digits.length === 10 && digits.startsWith('5') ? `0${digits}` : digits;
+      if (!/^05\d{9}$/.test(normalizedPhone)) {
+          setMessage({ kind: 'error', text: 'Telefon numarasını 05xx xxx xx xx biçiminde yazın.' });
+          return;
+      }
       setPhoneBusy(true); setMessage(null);
       try {
-          const result = await requestCraftsmanPhoneChange(craftsmanId, newPhone);
+          const result = await requestCraftsmanPhoneChange(craftsmanId, normalizedPhone);
+          setNewPhone(normalizedPhone);
           setPhoneChallengeId(result.id);
           setDevelopmentPhoneCode(result.developmentCode ?? '');
           setMessage({ kind: 'success', text: 'Yeni numarana doğrulama kodu gönderildi.' })
@@ -772,6 +779,10 @@ function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; on
   }
 
   async function confirmPhoneChange() {
+      if (!phoneChallengeId || !/^\d{6}$/.test(phoneCode)) {
+          setMessage({ kind: 'error', text: 'SMS kodu 6 rakamdan oluşmalıdır.' });
+          return;
+      }
       setPhoneBusy(true); setMessage(null);
       try {
           await confirmCraftsmanPhoneChange(craftsmanId, phoneChallengeId, phoneCode);
@@ -813,7 +824,7 @@ function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; on
             {!phoneChallengeId ? (
                 <div className="phone-change">
                     <label>Yeni telefon numarası
-                        <input value={newPhone} onChange={(event) => setNewPhone(event.target.value)} inputMode="tel" placeholder="05xx xxx xx xx" />
+                        <input value={newPhone} onChange={(event) => setNewPhone(event.target.value.replace(/[^\d\s()+-]/g, ''))} inputMode="tel" autoComplete="tel" placeholder="05xx xxx xx xx" />
                     </label>
                     <button disabled={phoneBusy || newPhone.length < 10} onClick={() => void requestPhoneChange()} type="button">
                         {phoneBusy ? 'Gönderiliyor…' : 'SMS kodu gönder'}
@@ -828,6 +839,7 @@ function Profile({ craftsmanId, onUpdated, onLogout }: { craftsmanId: string; on
                     <button disabled={phoneBusy || phoneCode.length !== 6} onClick={() => void confirmPhoneChange()} type="button">
                         {phoneBusy ? 'Doğrulanıyor…' : 'Numarayı doğrula'}
                     </button>
+                    <button disabled={phoneBusy} onClick={() => { setPhoneChallengeId(''); setPhoneCode(''); setDevelopmentPhoneCode(''); setMessage(null) }} type="button">Numarayı değiştir</button>
                 </div>
             )}
         </section>
@@ -1007,7 +1019,7 @@ function DealerRiskPage() { return <main className="dealer-shell"><header><div><
 
 function AdminLogin({ onAuthenticated }: { onAuthenticated: (profile: AdminLoginResult) => void }) {
   const [userName, setUserName] = useState('admin'), [password, setPassword] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false)
-  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await loginAdmin(userName, password); authStore.setAdminToken(result.token); onAuthenticated(result) } catch (error) { setMessage(error instanceof Error ? error.message : 'Giriş yapılamadı.') } finally { setBusy(false) } }
+  const submit = async (event: FormEvent) => { event.preventDefault(); const normalizedUserName = userName.trim(); if (normalizedUserName.length < 3 || normalizedUserName.length > 80) { setMessage('Kullanıcı adı 3–80 karakter olmalıdır.'); return } if (password.length < 8) { setMessage('Parola en az 8 karakter olmalıdır.'); return } setBusy(true); setMessage(''); try { const result = await loginAdmin(normalizedUserName, password); authStore.setAdminToken(result.token); onAuthenticated(result) } catch (error) { setMessage(error instanceof Error ? error.message : 'Giriş yapılamadı. Bağlantıyı kontrol edip tekrar deneyin.') } finally { setBusy(false) } }
   return <main className="admin-login"><div className="login-logo">⚒</div><span>USTA KULÜBÜ YÖNETİMİ</span><h1>Yönetici Girişi</h1><p>Kampanya, puan ve raporlama araçlarına yalnızca yetkili hesaplar erişebilir.</p><form onSubmit={submit}><label>Kullanıcı adı<input value={userName} onChange={(event) => setUserName(event.target.value)} autoComplete="username" required /></label><label>Parola<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" minLength={8} required /></label><small>Geliştirme hesabı: admin / Usta2026!</small>{message && <p>{message}</p>}<button disabled={busy} type="submit">{busy ? 'Doğrulanıyor…' : 'Yönetim Paneline Gir'}</button></form></main>
 }
 
@@ -1025,10 +1037,10 @@ function AdminPortal() {
 }
 
 function AdminApp() {
-  const [overview, setOverview] = useState<AdminOverview | null>(null); const [items, setItems] = useState<AdminRiskCase[]>([]); const [notes, setNotes] = useState<Record<string, string>>({}); const [message, setMessage] = useState(''); const [busyId, setBusyId] = useState('')
-  async function load() { const [summary, risks] = await Promise.all([getAdminOverview(), getAdminRiskCases()]); setOverview(summary); setItems(risks) }
-  useEffect(() => { load().catch(() => setMessage('Yönetici verileri yüklenemedi.')) }, [])
-  async function changeStatus(id: string, status: 'InReview' | 'Resolved' | 'Rejected') { const note = notes[id]?.trim() ?? ''; if (note.length < 5) { setMessage('Karar vermeden önce en az 5 karakterlik inceleme notu yazın.'); return } setBusyId(id); setMessage(''); try { await updateAdminRiskStatus(id, status, note); setNotes((current) => ({ ...current, [id]: '' })); await load() } catch (error) { setMessage(error instanceof Error ? error.message : 'Durum güncellenemedi.') } finally { setBusyId('') } }
+  const [overview, setOverview] = useState<AdminOverview | null>(null); const [items, setItems] = useState<AdminRiskCase[]>([]); const [notes, setNotes] = useState<Record<string, string>>({}); const [message, setMessage] = useState(''); const [busyId, setBusyId] = useState(''); const [loading, setLoading] = useState(true)
+  const load = useCallback(async () => { setLoading(true); try { const [summary, risks] = await Promise.all([getAdminOverview(), getAdminRiskCases()]); setOverview(summary); setItems(risks) } catch (error) { setMessage(error instanceof Error ? error.message : 'Yönetici verileri yüklenemedi. Sayfayı yenileyip tekrar deneyin.') } finally { setLoading(false) } }, [])
+  useEffect(() => { void load() }, [load])
+  async function changeStatus(id: string, status: 'InReview' | 'Resolved' | 'Rejected') { const note = notes[id]?.trim() ?? ''; const statusLabel = status === 'InReview' ? 'incelemeye almak' : status === 'Resolved' ? 'çözmek' : 'reddetmek'; if (note.length < 5) { setMessage('Karar vermeden önce en az 5 karakterlik inceleme notu yazın.'); return } if (!window.confirm(`Bu risk kaydını ${statusLabel} istediğinizi onaylıyor musunuz?`)) return; setBusyId(id); setMessage(''); try { await updateAdminRiskStatus(id, status, note); setNotes((current) => ({ ...current, [id]: '' })); setMessage(`Risk kaydı ${status === 'InReview' ? 'incelemeye alındı' : status === 'Resolved' ? 'çözüldü' : 'reddedildi'}.`); await load() } catch (error) { setMessage(error instanceof Error ? error.message : 'Durum güncellenemedi. Tekrar deneyin.') } finally { setBusyId('') } }
   useEffect(() => {
     const destinations = ['/admin', '/admin/craftsmen', '/admin/dealers', '/admin/campaigns', '/admin/rewards', '/admin']
     const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.admin-shell aside nav > button'))
@@ -1041,6 +1053,7 @@ function AdminApp() {
   }, [])
 
   const labels: Record<AdminRiskCase['status'], string> = { Open: 'Açık', InReview: 'İncelemede', Resolved: 'Çözüldü', Rejected: 'Reddedildi' }
+  if (loading && !overview) return <main className="profile-loading" aria-live="polite">Yönetim verileri yükleniyor…</main>
   return <main className="admin-shell"><aside><div className="admin-brand"><span>⚒</span><div><small>USTA KULÜBÜ</small><strong>Yönetim</strong></div></div><nav><a className="active" href="/admin">⌂ Genel Bakış</a><a href="/admin/craftsmen">♧ Ustalar</a><a href="/admin/dealers">▣ Bayiler</a><a href="/admin/campaigns">◇ Kampanyalar</a><a href="/admin/rewards">♙ Ödüller</a><a href="/admin">⚑ Risk Kontrolü</a></nav><a href="/">Usta uygulaması</a><a href="/dealer">Bayi paneli</a></aside><section className="admin-main"><header><div><span>YÖNETİCİ PANELİ</span><h1>Genel Bakış</h1></div><b>Demo Yönetici</b></header>{message && <p className="admin-message">{message}</p>}<div className="admin-stats"><article><span>♧</span><div><small>Aktif Usta</small><strong>{overview?.craftsmen ?? '—'}</strong></div></article><article><span>▣</span><div><small>Aktif Bayi</small><strong>{overview?.dealers ?? '—'}</strong></div></article><article><span>♙</span><div><small>Aktif Kupon</small><strong>{overview?.activeCoupons ?? '—'}</strong></div></article><article className="risk"><span>⚑</span><div><small>Açık Risk Kaydı</small><strong>{overview?.openRiskCases ?? '—'}</strong></div></article></div><div className="admin-section-title"><div><h2>Şüpheli İşlemler</h2><p>Bayi çalışanlarından gelen son bildirimler</p></div><span>{items.length} kayıt</span></div><section className="admin-risk-list">{items.length === 0 && <p>Henüz şüpheli işlem bildirimi bulunmuyor.</p>}{items.map((item) => <article key={item.id}><div className="risk-head"><span>{item.referenceType === 'ProductCode' ? 'ÜRÜN KODU' : item.referenceType === 'Coupon' ? 'KUPON' : 'SATIŞ'}</span><b className={item.status}>{labels[item.status]}</b></div><h3>{item.reason}</h3><code>{item.referenceValue}</code><p>{item.description}</p><small>{item.dealer} · {item.dealerEmployee} · {dateFormatter.format(new Date(item.createdAtUtc))}</small>{item.actions.length > 0 && <div className="risk-history"><strong>İnceleme geçmişi</strong>{item.actions.map((action) => <div key={action.id}><b>{labels[action.status]}</b><p>{action.decisionNote}</p><small>{action.reviewer} · {dateFormatter.format(new Date(action.createdAtUtc))}</small></div>)}</div>}<label className="risk-note">İnceleme / karar notu<textarea value={notes[item.id] ?? ''} onChange={(event) => setNotes({ ...notes, [item.id]: event.target.value })} minLength={5} maxLength={1000} placeholder="Kanıtı ve karar gerekçesini yazın…" /></label><div className="risk-actions"><button onClick={() => changeStatus(item.id, 'InReview')} disabled={busyId === item.id || item.status !== 'Open' || (notes[item.id]?.trim().length ?? 0) < 5} type="button">İncelemeye Al</button><button onClick={() => changeStatus(item.id, 'Resolved')} disabled={busyId === item.id || item.status === 'Resolved' || (notes[item.id]?.trim().length ?? 0) < 5} type="button">Çözüldü</button><button onClick={() => changeStatus(item.id, 'Rejected')} disabled={busyId === item.id || item.status === 'Rejected' || (notes[item.id]?.trim().length ?? 0) < 5} type="button">Reddet</button></div></article>)}</section></section></main>
 }
 
@@ -1878,7 +1891,7 @@ function DealerActivityPage() {
 
 function DealerLogin({ onAuthenticated }: { onAuthenticated: (profile: DealerLoginResult) => void }) {
   const [dealerCode, setDealerCode] = useState('YLV-001'), [pin, setPin] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false)
-  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { const result = await loginDealer(dealerCode, pin); authStore.setDealerToken(result.token); onAuthenticated(result) } catch (error) { setMessage(error instanceof Error ? error.message : 'Giriş yapılamadı.') } finally { setBusy(false) } }
+  const submit = async (event: FormEvent) => { event.preventDefault(); const normalizedDealerCode = dealerCode.trim().toUpperCase(); if (!/^[A-Z0-9-]{3,30}$/.test(normalizedDealerCode)) { setMessage('Bayi kodu yalnızca harf, rakam ve tire içerebilir.'); return } if (!/^\d{6}$/.test(pin)) { setMessage('Çalışan kodu 6 rakamdan oluşmalıdır.'); return } setBusy(true); setMessage(''); try { const result = await loginDealer(normalizedDealerCode, pin); authStore.setDealerToken(result.token); onAuthenticated(result) } catch (error) { setMessage(error instanceof Error ? error.message : 'Giriş yapılamadı. Bağlantıyı kontrol edip tekrar deneyin.') } finally { setBusy(false) } }
   return <main className="dealer-login"><div className="login-logo">▣</div><span>BAYİ BAĞLANTISI</span><h1>Çalışan Girişi</h1><p>Kupon teslimi ve iade işlemleri yetkili çalışan oturumuyla yapılır.</p><form onSubmit={submit}><label>Bayi kodu<input value={dealerCode} onChange={(event) => setDealerCode(event.target.value.toUpperCase())} minLength={3} maxLength={30} required /></label><label>6 haneli çalışan kodu<input className="dealer-pin" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required /></label><small>Geliştirme girişi: YLV-001 / 123456</small>{message && <p>{message}</p>}<button disabled={busy} type="submit">{busy ? 'Doğrulanıyor…' : 'Güvenli Giriş'}</button></form></main>
 }
 
