@@ -1739,6 +1739,9 @@ function AdminAuditPage() {
                                 <small style={{ display: 'block', opacity: 0.8, fontSize: '0.9em' }}>
                                     İşlemi Yapan Yönetici: <b style={{ color: 'var(--text)' }}>{item.actor}</b> · Varlık: {item.entityType} {item.entityId ? `(ID: ${item.entityId.slice(0, 8)})` : ''}
                                 </small>
+                                {item.correlationId && <small style={{ display: 'block', marginTop: '6px', color: 'var(--text-muted)', fontSize: '0.85em' }}>
+                                    İşlem no: <code>{item.correlationId}</code>
+                                </small>}
                             </div>
                         </article>
                     )
