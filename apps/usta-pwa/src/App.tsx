@@ -922,6 +922,7 @@ function Notifications({ craftsmanId, back }: { craftsmanId: string; back: () =>
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
+  const [failedAction, setFailedAction] = useState<CraftsmanNotification | 'all' | null>(null)
   useEffect(() => {
     if (!craftsmanId) { setLoading(false); return }
     const controller = new AbortController()
@@ -935,28 +936,28 @@ function Notifications({ craftsmanId, back }: { craftsmanId: string; back: () =>
   const visibleItems = filter === 'unread' ? items.filter((item) => !item.readAtUtc) : items
   async function read(item: CraftsmanNotification) {
     if (item.readAtUtc || busyId) return
-    setBusyId(item.id); setError('')
+    setBusyId(item.id); setError(''); setFailedAction(null)
     try {
       await markNotificationRead(craftsmanId, item.id)
       setItems((current) => current.map((x) => x.id === item.id ? { ...x, readAtUtc: new Date().toISOString() } : x))
       setUnreadCount((count) => Math.max(0, count - 1))
-    } catch { setError('Bildirim okundu olarak işaretlenemedi.') } finally { setBusyId('') }
+    } catch { setError('Bildirim okundu olarak işaretlenemedi.'); setFailedAction(item) } finally { setBusyId('') }
   }
   async function readAll() {
     if (unreadCount === 0 || busyId) return
-    setBusyId('all'); setError('')
+    setBusyId('all'); setError(''); setFailedAction(null)
     try {
       await markAllNotificationsRead(craftsmanId)
       const now = new Date().toISOString()
       setItems((current) => current.map((x) => ({ ...x, readAtUtc: x.readAtUtc ?? now })))
       setUnreadCount(0)
-    } catch { setError('Bildirimler okundu olarak işaretlenemedi.') } finally { setBusyId('') }
+    } catch { setError('Bildirimler okundu olarak işaretlenemedi.'); setFailedAction('all') } finally { setBusyId('') }
   }
   const icons: Record<string, string> = { Welcome: '★', Campaign: '◇', PointsEarned: '+', Reward: '🎁', Delivery: '✓', Return: '↩', Support: '♧' }
   return <>
     <header className="page-header simple-header"><button onClick={back} type="button" aria-label="Geri dön">‹</button><h1>Bildirimler {unreadCount > 0 && <small>({unreadCount} yeni)</small>}</h1><button disabled={unreadCount === 0 || busyId !== ''} onClick={() => void readAll()} type="button">{busyId === 'all' ? 'İşleniyor…' : 'Tümünü oku'}</button></header>
     <div className="notification-filters" role="group" aria-label="Bildirim filtresi"><button className={filter === 'all' ? 'selected' : ''} aria-pressed={filter === 'all'} onClick={() => setFilter('all')} type="button">Tümü ({items.length})</button><button className={filter === 'unread' ? 'selected' : ''} aria-pressed={filter === 'unread'} onClick={() => setFilter('unread')} type="button">Okunmamış ({unreadCount})</button></div>
-    {error && <p className="screen-error" role="alert">{error}</p>}
+    {error && <p className="screen-error" role="alert">{error}{failedAction && <button onClick={() => { if (failedAction === 'all') void readAll(); else void read(failedAction) }} type="button">Tekrar Dene</button>}</p>}
     {loading && <div className="coupon-state" aria-live="polite">Bildirimler yükleniyor…</div>}
     {!loading && <section className="notification-list">{visibleItems.map((item) => <article className={item.readAtUtc ? 'read' : 'unread'} key={item.id} onClick={() => void read(item)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void read(item) } }} role="button" tabIndex={0} aria-label={`${item.title}, ${item.readAtUtc ? 'okundu' : 'okunmadı'}`}><span>{icons[item.type] ?? '◇'}</span><div><b>{item.title}</b><p>{item.message}</p><small>{dateFormatter.format(new Date(item.createdAtUtc))}{!item.readAtUtc && ' · Yeni'}{item.readAtUtc && ' · Okundu'}</small></div></article>)}</section>}
     {!loading && !error && visibleItems.length === 0 && <div className="coupon-state">{filter === 'unread' ? 'Okunmamış bildirimin yok.' : 'Henüz işlem bildirimi bulunmuyor.'}</div>}
