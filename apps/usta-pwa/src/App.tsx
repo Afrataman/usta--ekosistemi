@@ -403,17 +403,20 @@ function Rewards({ availablePoints, pointDebt, craftsmanId, onBalanceChanged }: 
 function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) => void }) {
   const [wallet, setWallet] = useState<WalletData | null>(null)
   const [error, setError] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [reloadKey, setReloadKey] = useState(0)
 
   // Yeni State'ler: Filtreleme ve Detay Modalı için
   const [filter, setFilter] = useState<'all' | 'earned' | 'spent' | 'returned' | 'adjustment'>('all')
   const [selectedMovement, setSelectedMovement] = useState<WalletData['movements'][number] | null>(null)
 
   useEffect(() => {
-    if (!dashboard.craftsmanId) return
+    if (!dashboard.craftsmanId) { setLoading(false); return }
     const controller = new AbortController()
-    getWallet(dashboard.craftsmanId, controller.signal).then(setWallet).catch(() => setError(true))
+    setLoading(true); setError(false); setWallet(null)
+    getWallet(dashboard.craftsmanId, controller.signal).then((data) => { if (!controller.signal.aborted) setWallet(data) }).catch(() => { if (!controller.signal.aborted) setError(true) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [dashboard.craftsmanId, dashboard.balance])
+  }, [dashboard.craftsmanId, dashboard.balance, reloadKey])
 
   const availablePoints = wallet?.availablePoints ?? dashboard.availablePoints
   const pointDebt = wallet?.pointDebt ?? dashboard.pointDebt
@@ -476,7 +479,8 @@ function Wallet({ dashboard, go }: { dashboard: Dashboard; go: (screen: Screen) 
           </select>
       </div>
 
-      {error && <p className="wallet-error" role="alert">Bağlantı kurulamadı; son bilinen hareketler gösteriliyor.</p>}
+      {loading && <p className="wallet-error" role="status">Puan hareketleri yenileniyor…</p>}
+      {error && <p className="wallet-error" role="alert">Bağlantı kurulamadı; son bilinen hareketler gösteriliyor. <button onClick={() => setReloadKey((value) => value + 1)} type="button">Tekrar Dene</button></p>}
 
       <section className="wallet-movements">
         {filteredMovements.length === 0 && <p className="empty-wallet">Bu kategoride henüz puan hareketi yok.</p>}
