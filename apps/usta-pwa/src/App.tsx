@@ -1650,10 +1650,20 @@ function AdminAuditPage() {
   const [data, setData] = useState<AdminAuditResponse | null>(null)
   const [filter, setFilter] = useState('')
   const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
-      getAdminAudit(filter || undefined).then(setData).catch(() => setMessage('Denetim kaydı yüklenemedi.'))
-  }, [filter])
+      let active = true
+      setLoading(true)
+      setMessage('')
+      setData(null)
+      getAdminAudit(filter || undefined)
+        .then((result) => { if (active) setData(result) })
+        .catch(() => { if (active) setMessage('Denetim kaydı yüklenemedi.') })
+        .finally(() => { if (active) setLoading(false) })
+      return () => { active = false }
+  }, [filter, reloadKey])
 
   const actionNames: Record<string, string> = {
       ActiveStatusChanged: 'Durum Değiştirildi',
@@ -1706,7 +1716,7 @@ function AdminAuditPage() {
                 <b>Değiştirilemez merkezi loglar</b>
             </header>
 
-            {message && <p className="admin-message" role="alert">{message}</p>}
+            {message && <p className="admin-message" role="alert">{message} <button onClick={() => setReloadKey((value) => value + 1)} type="button">Tekrar Dene</button></p>}
 
             <div className="audit-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, maxWidth: '400px' }}>Varlık Türüne Göre Filtrele:
@@ -1718,6 +1728,7 @@ function AdminAuditPage() {
                 <span style={{ fontWeight: 'bold' }}>{data?.rows.length ?? 0} kayıt gösteriliyor</span>
             </div>
 
+            {loading && <p className="audit-empty" role="status">Denetim kayıtları yükleniyor…</p>}
             <section className="audit-timeline" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {data?.rows.map((item) => {
                     const borderColor = actionColors[item.action] || 'var(--border)'
