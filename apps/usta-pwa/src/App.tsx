@@ -1432,11 +1432,13 @@ function AdminSupportCard({ item, onChanged }: { item: AdminSupportRequest; onCh
   const [assignedTo, setAssignedTo] = useState(item.assignedTo ?? '')
   const [reply, setReply] = useState('')
   const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [feedbackIsError, setFeedbackIsError] = useState(false)
   // Açık ve işlemdeki talepleri otomatik olarak genişletik göster
   const [expanded, setExpanded] = useState(item.status === 'Open' || item.status === 'InProgress')
 
-  const save = async () => { setBusy(true); try { await updateAdminSupportRequest(item.id, { status, priority, assignedTo: assignedTo || null }); await onChanged() } finally { setBusy(false) } }
-  const send = async (event: FormEvent) => { event.preventDefault(); if (reply.trim().length < 3) return; setBusy(true); try { await replyAdminSupportRequest(item.id, reply); setReply(''); setExpanded(true); await onChanged() } finally { setBusy(false) } }
+  const save = async () => { setBusy(true); setFeedback(''); try { await updateAdminSupportRequest(item.id, { status, priority, assignedTo: assignedTo.trim() || null }); await onChanged(); setFeedbackIsError(false); setFeedback('Talep bilgileri güncellendi.') } catch (error) { setFeedbackIsError(true); setFeedback(error instanceof Error ? error.message : 'Talep bilgileri kaydedilemedi.') } finally { setBusy(false) } }
+  const send = async (event: FormEvent) => { event.preventDefault(); const message = reply.trim(); if (message.length < 3) { setFeedbackIsError(true); setFeedback('Yanıt en az 3 karakter olmalıdır.'); return } setBusy(true); setFeedback(''); try { await replyAdminSupportRequest(item.id, message); setReply(''); setExpanded(true); await onChanged(); setFeedbackIsError(false); setFeedback('Yanıt ustaya gönderildi.') } catch (error) { setFeedbackIsError(true); setFeedback(error instanceof Error ? error.message : 'Yanıt gönderilemedi.') } finally { setBusy(false) } }
 
   const statusNames = { Open: 'Açık (Yeni)', InProgress: 'İşlemde', Resolved: 'Çözüldü', Closed: 'Kapalı' }
   const priorityNames = { Low: 'Düşük', Normal: 'Normal', High: 'Yüksek', Urgent: 'Acil (SLA)' }
@@ -1473,6 +1475,8 @@ function AdminSupportCard({ item, onChanged }: { item: AdminSupportRequest; onCh
                 <code style={{ fontWeight: 'bold', fontSize: '1.1em', marginLeft: '5px' }}>{item.referenceValue}</code>
             </div>
         )}
+
+        {feedback && <p className={feedbackIsError ? 'admin-message' : 'admin-info-message'} role={feedbackIsError ? 'alert' : 'status'}>{feedback}</p>}
 
         <div className="support-controls" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', background: 'var(--bg-card)', padding: '15px', borderRadius: '8px', alignItems: 'end' }}>
             <label>Durum
