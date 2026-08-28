@@ -1541,10 +1541,12 @@ function AdminSupportPage() {
   const [filter, setFilter] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [reloadKey, setReloadKey] = useState(0)
 
-  const load = async () => { try { setItems(await getAdminSupportRequests(filter || undefined)); setMessage('') } catch { setMessage('Destek talepleri yüklenemedi.') } }
+  const load = useCallback(async () => { setLoading(true); setMessage(''); setItems([]); try { setItems(await getAdminSupportRequests(filter || undefined)) } catch { setMessage('Destek talepleri yüklenemedi.') } finally { setLoading(false) } }, [filter])
 
-  useEffect(() => { getAdminSupportRequests(filter || undefined).then(setItems).catch(() => setMessage('Destek talepleri yüklenemedi.')) }, [filter])
+  useEffect(() => { void load() }, [load, reloadKey])
 
   const openCount = items.filter((item) => item.status === 'Open').length
   const urgentCount = items.filter((item) => item.priority === 'Urgent' && item.status !== 'Closed').length
@@ -1574,7 +1576,7 @@ function AdminSupportPage() {
                 <b>{filteredItems.length} talep listeleniyor</b>
             </header>
 
-            {message && <p className="admin-message" role="alert">{message}</p>}
+            {message && <p className="admin-message" role="alert">{message} <button onClick={() => setReloadKey((value) => value + 1)} type="button">Tekrar Dene</button></p>}
 
             <div className="support-admin-summary" style={{ display: 'flex', gap: '15px', marginBottom: '25px', flexWrap: 'wrap' }}>
                 <article style={{ flex: 1, background: 'var(--bg-card)', padding: '20px', borderRadius: '8px', borderLeft: '4px solid var(--danger)' }}>
@@ -1610,7 +1612,8 @@ function AdminSupportPage() {
             </div>
 
             <section className="support-admin-list">
-                {filteredItems.length === 0 && (
+                {loading && <p className="audit-empty" role="status">Destek talepleri yükleniyor…</p>}
+                {!loading && filteredItems.length === 0 && (
                     <div style={{ padding: '50px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '8px', color: 'var(--text-muted)' }}>
                         <span style={{ fontSize: '40px', display: 'block', marginBottom: '15px' }}>🔍</span>
                         <p style={{ fontSize: '1.1em' }}>Seçtiğiniz filtreye veya aramaya uygun destek talebi bulunamadı.</p>
