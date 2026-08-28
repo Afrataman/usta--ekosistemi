@@ -217,11 +217,11 @@ function Scanner({ back, craftsmanId, onRedeemed }: { back: () => void; craftsma
       setResult({ kind: 'error', message: 'Bağlantı hatası: Kullanıcı oturumu bulunamadı.' })
       return
     }
-    if (code.length < 8) {
-      setResult({ kind: 'error', message: 'Ürün kodu en az 8 karakter olmalıdır.' })
+    if (code.length < 8 || code.length > 30) {
+      setResult({ kind: 'error', message: 'Ürün kodu 8 ile 30 karakter arasında olmalıdır.' })
       return
     }
-    if (code.startsWith('-') || code.endsWith('-') || code.includes('--')) {
+    if (!/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(code)) {
       setResult({ kind: 'error', message: 'Kod biçimi geçersiz. Tireler yalnızca bölümler arasında kullanılabilir.' })
       return
     }
