@@ -30,7 +30,8 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddCors(options => options.AddPolicy("DevelopmentPwa", policy =>
     policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
         .AllowAnyHeader()
-        .AllowAnyMethod()));
+        .AllowAnyMethod()
+        .WithExposedHeaders(RequestCorrelationMiddleware.HeaderName)));
 builder.Services.AddDbContext<UstaEkosistemiDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("UstaEkosistemi")));
 builder.Services.AddScoped<DealerSessionAuthenticator>();

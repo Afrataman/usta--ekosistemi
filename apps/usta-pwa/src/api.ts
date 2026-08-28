@@ -23,7 +23,8 @@ export type Dashboard = {
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:5028' : window.location.origin)
 export class ApiRequestError extends Error {
   readonly status: number
-  constructor(message: string, status: number) { super(message); this.name = 'ApiRequestError'; this.status = status }
+  readonly correlationId: string | null
+  constructor(message: string, status: number, correlationId: string | null = null) { super(message); this.name = 'ApiRequestError'; this.status = status; this.correlationId = correlationId }
 }
 const craftsmanHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.getCraftsmanToken()}` })
 const craftsmanFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, { ...init, headers: { ...craftsmanHeaders(), ...(init.headers as Record<string, string> | undefined) } })
@@ -282,7 +283,9 @@ export async function redeemProductCode(craftsmanId: string, code: string, reque
 
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { message?: string } | null
-    throw new ApiRequestError(body?.message ?? 'Kod kullanılamadı. Lütfen tekrar deneyin.', response.status)
+    const message = body?.message ?? 'Kod kullanılamadı. Lütfen tekrar deneyin.'
+    const correlationId = response.headers.get('X-Correlation-Id')
+    throw new ApiRequestError(correlationId ? `${message} İşlem no: ${correlationId}` : message, response.status, correlationId)
   }
 
   return response.json() as Promise<RedeemResult>
