@@ -1038,6 +1038,7 @@ function AdminManagementPage({ kind }: { kind: 'craftsmen' | 'dealers' }) {
   const [craftsmen, setCraftsmen] = useState<AdminCraftsman[]>([])
   const [dealers, setDealers] = useState<AdminDealer[]>([])
   const [message, setMessage] = useState('')
+  const [messageIsError, setMessageIsError] = useState(false)
   const [busyId, setBusyId] = useState('')
   const [loading, setLoading] = useState(true)
   const [reloadKey, setReloadKey] = useState(0)
@@ -1046,11 +1047,12 @@ function AdminManagementPage({ kind }: { kind: 'craftsmen' | 'dealers' }) {
   const [searchTerm, setSearchTerm] = useState('')
 
   const load = useCallback(async () => {
-      setLoading(true); setMessage('')
+      setLoading(true); setMessage(''); setMessageIsError(false)
       try {
         if (kind === 'craftsmen') setCraftsmen(await getAdminCraftsmen())
         else setDealers(await getAdminDealers())
       } catch (error) {
+        setMessageIsError(true)
         setMessage(error instanceof Error ? error.message : 'Kayıtlar yüklenemedi.')
       } finally { setLoading(false) }
   }, [kind])
@@ -1062,11 +1064,17 @@ function AdminManagementPage({ kind }: { kind: 'craftsmen' | 'dealers' }) {
   }, [kind, load, reloadKey])
 
   async function toggle(id: string, active: boolean) {
+      const entityName = kind === 'craftsmen' ? 'usta hesabı' : 'bayi'
+      const action = active ? 'pasife almak' : 'yeniden aktifleştirmek'
+      if (!window.confirm(`Bu ${entityName} için ${action} işlemini onaylıyor musunuz?`)) return
       setBusyId(id); setMessage('');
       try {
           await setAdminEntityActive(kind, id, !active)
           await load()
+          setMessageIsError(false)
+          setMessage(active ? `${entityName} pasife alındı.` : `${entityName} yeniden aktifleştirildi.`)
       } catch (error) {
+          setMessageIsError(true)
           setMessage(error instanceof Error ? error.message : 'Durum güncellenemedi.')
       } finally {
           setBusyId('')
@@ -1119,7 +1127,7 @@ function AdminManagementPage({ kind }: { kind: 'craftsmen' | 'dealers' }) {
             </div>
 
             {loading && <div className="coupon-state" aria-live="polite">Kayıtlar yükleniyor…</div>}
-            {message && !loading && <div className="screen-error" role="alert"><span>{message}</span><button onClick={() => setReloadKey((value) => value + 1)} type="button">Tekrar dene</button></div>}
+            {message && !loading && <div className={messageIsError ? 'screen-error' : 'admin-info-message'} role={messageIsError ? 'alert' : 'status'}><span>{message}</span>{messageIsError && <button onClick={() => setReloadKey((value) => value + 1)} type="button">Tekrar dene</button>}</div>}
 
             <section className="management-list">
                 {kind === 'craftsmen' ? filteredCraftsmen.map((item) => (
