@@ -1854,11 +1854,11 @@ function DealerActivityPage() {
   const [data, setData] = useState<DealerActivityResponse | null>(null), [filter, setFilter] = useState(''), [message, setMessage] = useState(''), [loading, setLoading] = useState(true), [refreshKey, setRefreshKey] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true); setMessage('')
+    setLoading(true); setMessage(''); setData(null)
     getDealerActivity(filter || undefined, controller.signal)
-      .then(setData)
+      .then((result) => { if (!controller.signal.aborted) setData(result) })
       .catch((error: unknown) => { if (!(error instanceof DOMException && error.name === 'AbortError')) setMessage(error instanceof Error ? error.message : 'Geçmiş yüklenemedi.') })
-      .finally(() => setLoading(false))
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [filter, refreshKey])
   const labels: Record<string, string> = { Sale: 'Satış', Coupon: 'Kupon', Return: 'İade', Risk: 'Risk' }
