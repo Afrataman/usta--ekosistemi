@@ -2116,9 +2116,11 @@ function DealerApp() {
 
   async function verify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const couponCode = code.trim().toUpperCase()
+    if (!couponCode.startsWith('UK-') || couponCode.length < 6) { setMessage('Kupon kodu UK- ile başlamalı ve en az 6 karakter olmalıdır.'); return }
     setBusy(true); setMessage(''); setCoupon(null)
     try {
-        setCoupon(await verifyDealerCoupon(code.trim().toUpperCase()))
+        setCoupon(await verifyDealerCoupon(couponCode))
     } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Kupon doğrulanamadı.')
     } finally {
@@ -2127,6 +2129,10 @@ function DealerApp() {
   }
 
   async function fulfill() {
+    if (!coupon || coupon.status !== 'Created' || (coupon.expiresAtUtc && new Date(coupon.expiresAtUtc) <= new Date())) {
+        setMessage('Yalnızca geçerli ve süresi dolmamış kuponlar teslim edilebilir.')
+        return
+    }
     // GÜVENLİK KORUMASI: Yanlış tıklamayı önlemek için onay soruyoruz
     if (!window.confirm("Ödülü ustaya fiziki olarak teslim ettiğinizi onaylıyor musunuz? Bu işlem geri alınamaz.")) {
         return
