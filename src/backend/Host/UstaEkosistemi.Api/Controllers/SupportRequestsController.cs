@@ -1,0 +1,51 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using UstaEkosistemi.Api.Data;
+using UstaEkosistemi.Api.Domain;
+
+namespace UstaEkosistemi.Api.Controllers;
+
+[ApiController]
+[Route("api/craftsmen/{craftsmanId:guid}/support-requests")]
+public sealed class SupportRequestsController(UstaEkosistemiDbContext dbContext) : ControllerBase
+{
+    [HttpGet]
+    public async Task<IActionResult> GetMine(Guid craftsmanId, CancellationToken cancellationToken) => Ok(
+        await dbContext.SupportRequests.AsNoTracking().Where(x => x.CraftsmanId == craftsmanId)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Select(x => new { x.Id, x.Category, x.Subject, x.Description, x.ReferenceValue, status = x.Status.ToString(), priority = x.Priority.ToString(), x.CreatedAtUtc, x.UpdatedAtUtc, x.ResolvedAtUtc, responses = x.Responses.OrderBy(r => r.CreatedAtUtc).Select(r => new { r.Id, r.Author, r.Message, r.CreatedAtUtc }) })
+            .ToListAsync(cancellationToken));
+
+    [HttpPost]
+    public async Task<IActionResult> Create(Guid craftsmanId, CreateSupportRequest request, CancellationToken cancellationToken)
+    {
+        if (!await dbContext.Craftsmen.AnyAsync(x => x.Id == craftsmanId && x.IsActive, cancellationToken)) return NotFound(new { message = "Aktif usta bulunamadı." });
+        var category = request.Category.Trim();
+        if (category is not ("Puan" or "Ürün Kodu" or "Ödül / Kupon" or "Hesap" or "İtiraz" or "Diğer")) return ValidationProblem("Destek kategorisi geçersiz.");
+        if (string.IsNullOrWhiteSpace(request.Subject) || request.Subject.Trim().Length is < 5 or > 140 || string.IsNullOrWhiteSpace(request.Description) || request.Description.Trim().Length is < 10 or > 1500)
+            return ValidationProblem("Konu en az 5, açıklama en az 10 karakter olmalıdır.");
+        var reference = string.IsNullOrWhiteSpace(request.ReferenceValue) ? null : request.ReferenceValue.Trim().ToUpperInvariant();
+        if (category == "İtiraz" && (reference is null || reference.Length is < 4 or > 120)) return ValidationProblem("İtiraz için 4–120 karakterlik işlem referansı zorunludur.");
+        if (reference?.Length > 120) return ValidationProblem("İşlem referansı en fazla 120 karakter olabilir.");
+        var item = new SupportRequest { CraftsmanId = craftsmanId, Category = category, Subject = request.Subject.Trim(), Description = request.Description.Trim(), ReferenceValue = reference, Priority = category == "İtiraz" ? SupportPriority.High : SupportPriority.Normal };
+        dbContext.SupportRequests.Add(item); await dbContext.SaveChangesAsync(cancellationToken);
+        return Created($"/api/craftsmen/{craftsmanId}/support-requests/{item.Id}", new { item.Id, status = item.Status.ToString(), item.CreatedAtUtc });
+    }
+
+    [HttpPost("{requestId:guid}/responses")]
+    public async Task<IActionResult> Reply(Guid craftsmanId, Guid requestId, AddCraftsmanSupportResponse request, CancellationToken cancellationToken)
+    {
+        var message = request.Message.Trim();
+        if (message.Length is < 3 or > 1500) return ValidationProblem("Yanıt 3–1500 karakter olmalıdır.");
+        var item = await dbContext.SupportRequests.SingleOrDefaultAsync(x => x.Id == requestId && x.CraftsmanId == craftsmanId, cancellationToken);
+        if (item is null) return NotFound(new { message = "Destek talebi bulunamadı." });
+        if (item.Status == SupportRequestStatus.Closed) return Conflict(new { message = "Kapalı destek talebine yanıt verilemez. Yeni talep oluşturun." });
+        var response = new SupportResponse { SupportRequestId = item.Id, Author = "Usta", Message = message };
+        item.Status = SupportRequestStatus.InProgress; item.UpdatedAtUtc = response.CreatedAtUtc; item.ResolvedAtUtc = null;
+        dbContext.SupportResponses.Add(response); await dbContext.SaveChangesAsync(cancellationToken);
+        return Created($"/api/craftsmen/{craftsmanId}/support-requests/{item.Id}/responses/{response.Id}", new { response.Id, response.Author, response.Message, response.CreatedAtUtc });
+    }
+}
+
+public sealed record CreateSupportRequest(string Category, string Subject, string Description, string? ReferenceValue);
+public sealed record AddCraftsmanSupportResponse(string Message);

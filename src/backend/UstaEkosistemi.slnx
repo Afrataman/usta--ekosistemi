@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/Host/">
+    <Project Path="Host/UstaEkosistemi.Api/UstaEkosistemi.Api.csproj" />
+  </Folder>
+  <Project Path="../../tests/backend/UstaEkosistemi.Api.Tests/UstaEkosistemi.Api.Tests.csproj" />
+</Solution>

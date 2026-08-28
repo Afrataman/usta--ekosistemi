@@ -1,0 +1,409 @@
+import { authStore } from './authStore'
+
+export type DashboardMovement = {
+  description: string
+  createdAtUtc: string
+  amount: number
+}
+
+export type Dashboard = {
+  craftsmanId: string
+  fullName: string
+  level: string
+  balance: number
+  availablePoints: number
+  pointDebt: number
+  canRedeemRewards: boolean
+  rewardValueTry: number
+  pointsToNextLevel: number
+  movements: DashboardMovement[]
+  updatedAtUtc: string
+}
+
+const apiBaseUrl = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:5028' : window.location.origin)
+export class ApiRequestError extends Error {
+  readonly status: number
+  readonly correlationId: string | null
+  constructor(message: string, status: number, correlationId: string | null = null) { super(message); this.name = 'ApiRequestError'; this.status = status; this.correlationId = correlationId }
+}
+const craftsmanHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.getCraftsmanToken()}` })
+const craftsmanFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, { ...init, headers: { ...craftsmanHeaders(), ...(init.headers as Record<string, string> | undefined) } })
+const adminHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.getAdminToken()}` })
+const adminFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, { ...init, headers: { ...adminHeaders(), ...(init.headers as Record<string, string> | undefined) } })
+export type AdminLoginResult = { token: string; expiresAtUtc: string; user: string; role: string }
+export async function loginAdmin(userName: string, password: string): Promise<AdminLoginResult> { const response = await fetch(`${apiBaseUrl}/api/admin/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userName, password }) }); const body = await response.json() as AdminLoginResult & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Yönetici girişi başarısız.'); return body }
+export async function logoutAdmin(): Promise<void> { await fetch(`${apiBaseUrl}/api/admin/auth/logout`, { method: 'POST', headers: adminHeaders() }); authStore.clearAdminToken() }
+
+export async function getDemoDashboard(signal?: AbortSignal): Promise<Dashboard> {
+  const response = await fetch(`${apiBaseUrl}/api/demo/dashboard`, { signal })
+  if (!response.ok) {
+    throw new Error(`Dashboard alınamadı: ${response.status}`)
+  }
+
+  return response.json() as Promise<Dashboard>
+}
+
+export async function getCraftsmanDashboard(craftsmanId: string, signal?: AbortSignal): Promise<Dashboard> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/dashboard`, { signal })
+  if (!response.ok) throw new Error('Dashboard alınamadı.')
+  return response.json() as Promise<Dashboard>
+}
+
+export type OtpChallenge = { id: string; expiresInSeconds: number; developmentCode: string | null }
+export async function requestOtpCode(phoneNumber: string): Promise<OtpChallenge> {
+  const response = await fetch(`${apiBaseUrl}/api/auth/request-code`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phoneNumber }) })
+  const body = await response.json() as OtpChallenge & { message?: string }
+  if (!response.ok) throw new Error(body.message ?? 'Kod gönderilemedi.')
+  return body
+}
+
+export type CraftsmanLoginResult = { craftsmanId: string; fullName: string; needsProfile: boolean; token: string; expiresAtUtc: string }
+export async function verifyOtpCode(challengeId: string, code: string): Promise<CraftsmanLoginResult> {
+  const response = await fetch(`${apiBaseUrl}/api/auth/verify-code`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, code }) })
+  const body = await response.json() as CraftsmanLoginResult & { message?: string }
+  if (!response.ok) throw new Error(body.message ?? 'Kod doğrulanamadı.')
+  return body
+}
+
+export async function logoutCraftsman(): Promise<void> { await fetch(`${apiBaseUrl}/api/auth/logout`, { method: 'POST', headers: craftsmanHeaders() }) }
+
+export type RedeemResult = {
+  alreadyProcessed: boolean
+  earnedPoints: number
+  balance: number
+  product: string
+  redeemedAtUtc: string
+}
+
+export type WalletMovement = {
+  id: string
+  amount: number
+  transactionType: string
+  referenceType: string
+  referenceId: string
+  description: string
+  createdAtUtc: string
+}
+
+export type Wallet = {
+  id: string
+  fullName: string
+  level: string
+  balance: number
+  availablePoints: number
+  pointDebt: number
+  canRedeemRewards: boolean
+  movements: WalletMovement[]
+}
+
+export type Reward = {
+  id: string
+  name: string
+  description: string
+  pointCost: number
+  deliveryType: 'Digital' | 'DealerPickup'
+  imageKey: string
+  stockQuantity: number | null
+  isAvailable: boolean
+}
+
+export async function getRewards(deliveryType?: Reward['deliveryType'], signal?: AbortSignal): Promise<Reward[]> {
+  const query = deliveryType ? `?deliveryType=${deliveryType}` : ''
+  const response = await fetch(`${apiBaseUrl}/api/rewards${query}`, { signal })
+  if (!response.ok) {
+    throw new Error('Ödül kataloğu alınamadı.')
+  }
+
+  return response.json() as Promise<Reward[]>
+}
+
+export type RewardRedemptionResult = {
+  id: string
+  reward: string
+  pointsSpent: number
+  fulfillmentCode: string
+  deliveryType: Reward['deliveryType']
+  status: 'Created' | 'Fulfilled'
+  fulfilledAtUtc: string | null
+  alreadyProcessed: boolean
+  balance: number
+}
+
+export type RewardRedemption = {
+  id: string
+  rewardName: string
+  imageKey: string
+  deliveryType: Reward['deliveryType']
+  status: 'Created' | 'Fulfilled' | 'Cancelled'
+  pointsSpent: number
+  fulfillmentCode: string
+  createdAtUtc: string
+  expiresAtUtc: string | null
+  fulfilledAtUtc: string | null
+  fulfilledByDealerEmployee: string | null
+  fulfilledByDealer: string | null
+}
+
+export type CraftsmanProfile = {
+  id: string
+  fullName: string
+  phoneNumber: string
+  city: string | null
+  level: string
+  campaignNotificationsEnabled: boolean
+  smsNotificationsEnabled: boolean
+  privacyNoticeAcknowledged: boolean
+  explicitConsent: boolean
+  commercialCommunicationConsent: boolean
+  consentVersion: string
+  createdAtUtc: string
+}
+
+export type UpdateCraftsmanProfile = Pick<CraftsmanProfile,
+  'fullName' | 'city' | 'campaignNotificationsEnabled' | 'smsNotificationsEnabled' | 'privacyNoticeAcknowledged' | 'explicitConsent' | 'commercialCommunicationConsent' | 'consentVersion'>
+
+export async function getCraftsmanProfile(craftsmanId: string, signal?: AbortSignal): Promise<CraftsmanProfile> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, { signal })
+  if (!response.ok) throw new Error('Profil alınamadı.')
+  return response.json() as Promise<CraftsmanProfile>
+}
+
+export type CraftsmanConsentHistoryItem = { id: string; type: 'PrivacyNotice' | 'ExplicitConsent' | 'CommercialCommunication'; documentVersion: string; granted: boolean; recordedAtUtc: string }
+export async function getCraftsmanConsentHistory(craftsmanId: string, signal?: AbortSignal): Promise<CraftsmanConsentHistoryItem[]> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/consents`, { signal })
+  if (!response.ok) throw new Error('Onay geçmişi alınamadı.')
+  return response.json() as Promise<CraftsmanConsentHistoryItem[]>
+}
+
+export async function updateCraftsmanProfile(craftsmanId: string, profile: UpdateCraftsmanProfile): Promise<void> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/profile`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: string; message?: string } | null
+    throw new Error(body?.detail ?? body?.message ?? 'Profil kaydedilemedi.')
+  }
+}
+
+export type PhoneChangeChallenge = { id: string; expiresInSeconds: number; developmentCode: string | null }
+export async function requestCraftsmanPhoneChange(craftsmanId: string, newPhoneNumber: string): Promise<PhoneChangeChallenge> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/phone-change/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ newPhoneNumber }) })
+  const body = await response.json().catch(() => null) as PhoneChangeChallenge & { detail?: string; message?: string } | null
+  if (!response.ok) throw new Error(body?.detail ?? body?.message ?? 'Telefon doğrulama kodu gönderilemedi.')
+  return body!
+}
+
+export async function confirmCraftsmanPhoneChange(craftsmanId: string, challengeId: string, code: string): Promise<void> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/phone-change/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, code }) })
+  const body = await response.json().catch(() => null) as { detail?: string; message?: string } | null
+  if (!response.ok) throw new Error(body?.detail ?? body?.message ?? 'Telefon numarası doğrulanamadı.')
+}
+
+export type Campaign = { id: string; title: string; summary: string; pointMultiplier: number; startsAtUtc: string; endsAtUtc: string; productId: string | null; productName: string | null }
+export type CraftsmanNotification = { id: string; type: string; title: string; message: string; referenceType: string | null; referenceId: string | null; createdAtUtc: string; readAtUtc: string | null }
+export type NotificationInbox = { unreadCount: number; items: CraftsmanNotification[] }
+export type SupportItem = { id: string; category: string; subject: string; description: string; referenceValue: string | null; status: string; priority: string; createdAtUtc: string; updatedAtUtc: string; resolvedAtUtc: string | null; responses: Array<{ id: string; author: string; message: string; createdAtUtc: string }> }
+
+export async function getCampaigns(signal?: AbortSignal): Promise<Campaign[]> {
+  const response = await fetch(`${apiBaseUrl}/api/campaigns`, { signal })
+  if (!response.ok) throw new Error('Kampanyalar alınamadı.')
+  return response.json() as Promise<Campaign[]>
+}
+
+export async function getNotifications(craftsmanId: string, signal?: AbortSignal): Promise<NotificationInbox> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications`, { signal })
+  if (!response.ok) throw new Error('Bildirimler alınamadı.')
+  return response.json() as Promise<NotificationInbox>
+}
+
+export async function markNotificationRead(craftsmanId: string, notificationId: string): Promise<void> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications/${notificationId}/read`, { method: 'POST' })
+  if (!response.ok) throw new Error('Bildirim güncellenemedi.')
+}
+
+export async function markAllNotificationsRead(craftsmanId: string): Promise<void> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/notifications/read-all`, { method: 'POST' })
+  if (!response.ok) throw new Error('Bildirimler güncellenemedi.')
+}
+
+export async function getSupportRequests(craftsmanId: string, signal?: AbortSignal): Promise<SupportItem[]> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { signal })
+  if (!response.ok) throw new Error('Destek talepleri alınamadı.')
+  return response.json() as Promise<SupportItem[]>
+}
+
+export async function createSupportRequest(craftsmanId: string, request: { category: string; subject: string; description: string; referenceValue: string | null }): Promise<void> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests`, { method: 'POST', body: JSON.stringify(request) })
+  if (!response.ok) throw new Error('Destek talebi oluşturulamadı.')
+}
+
+export async function replySupportRequest(craftsmanId: string, requestId: string, message: string): Promise<void> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/support-requests/${requestId}/responses`, { method: 'POST', body: JSON.stringify({ message }) })
+  if (!response.ok) { const body = await response.json().catch(() => null) as { detail?: string; message?: string } | null; throw new Error(body?.detail ?? body?.message ?? 'Yanıt gönderilemedi.') }
+}
+
+export async function getRewardRedemptions(craftsmanId: string, signal?: AbortSignal): Promise<RewardRedemption[]> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/reward-redemptions`, { signal })
+  if (!response.ok) {
+    throw new Error('Kuponlar alınamadı.')
+  }
+
+  return response.json() as Promise<RewardRedemption[]>
+}
+
+export async function redeemReward(rewardId: string, craftsmanId: string, requestId: string): Promise<RewardRedemptionResult> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/rewards/${rewardId}/redeem`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ craftsmanId, requestId }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null
+    throw new Error(body?.message ?? 'Ödül alınamadı.')
+  }
+
+  return response.json() as Promise<RewardRedemptionResult>
+}
+
+export async function getWallet(craftsmanId: string, signal?: AbortSignal): Promise<Wallet> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/wallet`, { signal })
+  if (!response.ok) {
+    throw new Error('Puan cüzdanı alınamadı.')
+  }
+
+  return response.json() as Promise<Wallet>
+}
+
+export async function redeemProductCode(craftsmanId: string, code: string, requestId: string): Promise<RedeemResult> {
+  const response = await craftsmanFetch(`${apiBaseUrl}/api/product-codes/redeem`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ craftsmanId, code, requestId }),
+  })
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null
+    const message = body?.message ?? 'Kod kullanılamadı. Lütfen tekrar deneyin.'
+    const correlationId = response.headers.get('X-Correlation-Id')
+    throw new ApiRequestError(correlationId ? `${message} İşlem no: ${correlationId}` : message, response.status, correlationId)
+  }
+
+  return response.json() as Promise<RedeemResult>
+}
+
+export type DealerCoupon = { id: string; fulfillmentCode: string; reward: string; craftsman: string; status: 'Created' | 'Fulfilled' | 'Cancelled'; expiresAtUtc: string | null; fulfilledAtUtc: string | null; fulfilledByDealerEmployeeId: string | null; alreadyProcessed: boolean }
+const dealerHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.getDealerToken()}` })
+export type DealerLoginResult = { token: string; expiresAtUtc: string; employee: string; dealer: string }
+export type DealerDashboard = { dealer: string; today: { sales: number; amount: number }; month: { sales: number; amount: number; uniqueCraftsmen: number; fulfilledRewards: number; returns: number }; recentSales: Array<{ id: string; saleReference: string; totalAmount: number; craftsman: string; employee: string; createdAtUtc: string }> }
+export async function loginDealer(dealerCode: string, pin: string): Promise<DealerLoginResult> { const response = await fetch(`${apiBaseUrl}/api/dealer/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealerCode, pin }) }); const body = await response.json() as DealerLoginResult & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Bayi girişi başarısız.'); return body }
+export async function logoutDealer(): Promise<void> { await fetch(`${apiBaseUrl}/api/dealer/auth/logout`, { method: 'POST', headers: dealerHeaders() }); authStore.clearDealerToken() }
+export async function getDealerDashboard(signal?: AbortSignal): Promise<DealerDashboard> { const response = await fetch(`${apiBaseUrl}/api/dealer/dashboard`, { headers: dealerHeaders(), signal }); const body = await response.json() as DealerDashboard & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Bayi özeti alınamadı.'); return body }
+export type DealerActivity = { id: string; type: 'Sale' | 'Coupon' | 'Return' | 'Risk'; title: string; reference: string; craftsman: string; employee: string; detail: string; status: string; occurredAtUtc: string }
+export type DealerActivityResponse = { dealerId: string; rows: DealerActivity[]; summary: { sales: number; coupons: number; returns: number; risks: number } }
+export async function getDealerActivity(type?: string, signal?: AbortSignal): Promise<DealerActivityResponse> { const query = type ? `?type=${encodeURIComponent(type)}` : ''; const response = await fetch(`${apiBaseUrl}/api/dealer/activity${query}`, { headers: dealerHeaders(), signal }); const body = await response.json() as DealerActivityResponse & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Bayi işlem geçmişi alınamadı.'); return body }
+
+export async function verifyDealerCoupon(code: string): Promise<DealerCoupon> {
+  const response = await fetch(`${apiBaseUrl}/api/dealer/coupons/${encodeURIComponent(code)}`, { headers: dealerHeaders() })
+  const body = await response.json() as DealerCoupon & { message?: string }
+  if (!response.ok) throw new Error(body.message ?? 'Kupon doğrulanamadı.')
+  return body
+}
+
+export async function fulfillDealerCoupon(code: string): Promise<DealerCoupon> {
+  const response = await fetch(`${apiBaseUrl}/api/dealer/coupons/${encodeURIComponent(code)}/fulfill`, { method: 'POST', headers: dealerHeaders() })
+  const body = await response.json() as DealerCoupon & { message?: string }
+  if (!response.ok) throw new Error(body.message ?? 'Teslim onaylanamadı.')
+  return body
+}
+
+export type ProductReturnResult = { alreadyProcessed: boolean; reversedPoints: number; balance?: number; pointDebt: number; rewardRedemptionRestricted: boolean; product?: string; returnedAtUtc: string; returnReason?: string }
+export async function returnDealerProduct(code: string, reason: string): Promise<ProductReturnResult> {
+  const response = await fetch(`${apiBaseUrl}/api/product-codes/return`, { method: 'POST', headers: dealerHeaders(), body: JSON.stringify({ code, reason }) })
+  const body = await response.json() as ProductReturnResult & { message?: string; detail?: string }
+  if (!response.ok) throw new Error(body.message ?? body.detail ?? 'İade işlemi tamamlanamadı.')
+  return body
+}
+
+export async function reportDealerRisk(request: { referenceType: string; referenceValue: string; reason: string; description: string }): Promise<{ id: string; status: string; createdAtUtc: string }> {
+  const response = await fetch(`${apiBaseUrl}/api/dealer/risk-cases`, { method: 'POST', headers: dealerHeaders(), body: JSON.stringify(request) })
+  const body = await response.json() as { id: string; status: string; createdAtUtc: string; message?: string; detail?: string }
+  if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Şüpheli işlem bildirilemedi.')
+  return body
+}
+export type MembershipPassResult = { token: string; expiresAtUtc: string }
+export async function createMembershipPass(craftsmanId: string): Promise<MembershipPassResult> { const response = await craftsmanFetch(`${apiBaseUrl}/api/craftsmen/${craftsmanId}/membership-pass`, { method: 'POST' }); if (!response.ok) throw new Error('Üyelik QR’ı oluşturulamadı.'); return response.json() as Promise<MembershipPassResult> }
+export type VerifiedMembership = { id: string; expiresAtUtc: string; craftsman: string; level: string }
+export async function verifyMembershipPass(token: string): Promise<VerifiedMembership> { const response = await fetch(`${apiBaseUrl}/api/dealer/membership-passes/${encodeURIComponent(token)}`, { headers: dealerHeaders() }); const body = await response.json() as VerifiedMembership & { message?: string }; if (!response.ok) throw new Error(body.message ?? 'Üyelik QR’ı doğrulanamadı.'); return body }
+export type DealerSaleResult = { id: string; saleReference: string; totalAmount: number; craftsman: string; createdAtUtc: string }
+export async function createDealerSale(membershipToken: string, saleReference: string, totalAmount: number): Promise<DealerSaleResult> { const response = await fetch(`${apiBaseUrl}/api/dealer/sales`, { method: 'POST', headers: dealerHeaders(), body: JSON.stringify({ membershipToken, saleReference, totalAmount }) }); const body = await response.json() as DealerSaleResult & { message?: string; detail?: string }; if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Satış eşleştirilemedi.'); return body }
+
+export type AdminOverview = { craftsmen: number; dealers: number; activeCoupons: number; openRiskCases: number }
+export type AdminRiskCase = { id: string; referenceType: string; referenceValue: string; reason: string; description: string; status: 'Open' | 'InReview' | 'Resolved' | 'Rejected'; createdAtUtc: string; reviewedAtUtc: string | null; dealerEmployee: string; dealer: string; actions: Array<{ id: string; status: 'InReview' | 'Resolved' | 'Rejected'; decisionNote: string; reviewer: string; createdAtUtc: string }> }
+export async function getAdminOverview(): Promise<AdminOverview> { const response = await adminFetch(`${apiBaseUrl}/api/admin/overview`); if (!response.ok) throw new Error('Yönetici özeti alınamadı.'); return response.json() as Promise<AdminOverview> }
+export async function getAdminRiskCases(): Promise<AdminRiskCase[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/risk-cases`); if (!response.ok) throw new Error('Risk kayıtları alınamadı.'); return response.json() as Promise<AdminRiskCase[]> }
+export async function updateAdminRiskStatus(id: string, status: 'InReview' | 'Resolved' | 'Rejected', decisionNote: string): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/risk-cases/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, decisionNote }) }); if (!response.ok) { const body = await response.json().catch(() => null) as { detail?: string; message?: string } | null; throw new Error(body?.detail ?? body?.message ?? 'Vaka durumu güncellenemedi.') } }
+export type AdminCraftsman = { id: string; fullName: string; phoneNumber: string; city: string | null; level: string; isActive: boolean; createdAtUtc: string; balance: number }
+export type AdminDealer = { id: string; code: string; name: string; isActive: boolean; activeEmployees: number; totalEmployees: number }
+export async function getAdminCraftsmen(): Promise<AdminCraftsman[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/craftsmen`); if (!response.ok) throw new Error('Ustalar alınamadı.'); return response.json() as Promise<AdminCraftsman[]> }
+export async function getAdminDealers(): Promise<AdminDealer[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/dealers`); if (!response.ok) throw new Error('Bayiler alınamadı.'); return response.json() as Promise<AdminDealer[]> }
+export async function setAdminEntityActive(kind: 'craftsmen' | 'dealers', id: string, isActive: boolean): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/${kind}/${id}/active`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive }) }); if (!response.ok) throw new Error('Durum güncellenemedi.') }
+export type AdminDealerEmployee = { id: string; dealerId: string; fullName: string; isActive: boolean; hasAccessCode: boolean; activeSessions: number }
+export async function getAdminDealerEmployees(dealerId: string): Promise<AdminDealerEmployee[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/dealers/${dealerId}/employees`); if (!response.ok) throw new Error('Bayi çalışanları alınamadı.'); return response.json() as Promise<AdminDealerEmployee[]> }
+export async function createAdminDealerEmployee(dealerId: string, fullName: string, pin: string): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/dealers/${dealerId}/employees`, { method: 'POST', body: JSON.stringify({ fullName, pin }) }); const body = await response.json().catch(() => null) as { message?: string; detail?: string } | null; if (!response.ok) throw new Error(body?.message ?? body?.detail ?? 'Bayi çalışanı oluşturulamadı.') }
+export async function resetAdminDealerEmployeePin(dealerId: string, id: string, pin: string): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/dealers/${dealerId}/employees/${id}/access-code`, { method: 'PUT', body: JSON.stringify({ pin }) }); const body = await response.json().catch(() => null) as { message?: string; detail?: string } | null; if (!response.ok) throw new Error(body?.message ?? body?.detail ?? 'Çalışan kodu yenilenemedi.') }
+export async function setAdminDealerEmployeeActive(dealerId: string, id: string, isActive: boolean): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/dealers/${dealerId}/employees/${id}/active`, { method: 'PATCH', body: JSON.stringify({ isActive }) }); if (!response.ok) throw new Error('Çalışan durumu güncellenemedi.') }
+export type DealerOnboardingResult = { id: string; code: string; name: string; employeeId: string; employee: string; warning: string }
+export async function onboardAdminDealer(code: string, name: string, employeeFullName: string, employeePin: string): Promise<DealerOnboardingResult> { const response = await adminFetch(`${apiBaseUrl}/api/admin/dealers/onboard`, { method: 'POST', body: JSON.stringify({ code, name, employeeFullName, employeePin }) }); const body = await response.json() as DealerOnboardingResult & { message?: string; detail?: string }; if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Bayi oluşturulamadı.'); return body }
+export type AdminCampaign = Campaign & { isActive: boolean; displayOrder: number }
+export async function getAdminCampaigns(): Promise<AdminCampaign[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/campaigns`); if (!response.ok) throw new Error('Kampanyalar alınamadı.'); return response.json() as Promise<AdminCampaign[]> }
+export async function createAdminCampaign(request: Omit<AdminCampaign, 'id' | 'productName'>): Promise<{ id: string; requiresApproval: boolean; isActive: boolean }> { const response = await adminFetch(`${apiBaseUrl}/api/admin/campaigns`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }); const body = await response.json().catch(() => null) as { id?: string; requiresApproval?: boolean; isActive?: boolean; detail?: string } | null; if (!response.ok) throw new Error(body?.detail ?? 'Kampanya oluşturulamadı.'); return { id: body?.id ?? '', requiresApproval: body?.requiresApproval ?? false, isActive: body?.isActive ?? false } }
+export async function setAdminCampaignActive(id: string, isActive: boolean): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/campaigns/${id}/active`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive }) }); if (!response.ok) throw new Error('Kampanya durumu güncellenemedi.') }
+export type CampaignApproval = { id: string; campaignId: string; campaign: string; pointMultiplier: number; status: 'Pending' | 'Approved' | 'Rejected'; requestedBy: string; requestedAtUtc: string; decidedBy: string | null; decidedAtUtc: string | null; decisionNote: string | null }
+export async function getAdminCampaignApprovals(): Promise<CampaignApproval[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/campaigns/approvals`); if (!response.ok) throw new Error('Kampanya onayları alınamadı.'); return response.json() as Promise<CampaignApproval[]> }
+export async function decideAdminCampaignApproval(id: string, decision: 'approve' | 'reject', note: string): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/campaigns/approvals/${id}/${decision}`, { method: 'POST', body: JSON.stringify({ note }) }); const body = await response.json().catch(() => null) as { message?: string; detail?: string } | null; if (!response.ok) throw new Error(body?.message ?? body?.detail ?? 'Kampanya kararı kaydedilemedi.') }
+export type AdminReward = Reward & { isActive: boolean; displayOrder: number; createdAtUtc: string }
+export async function getAdminRewards(): Promise<AdminReward[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/rewards`); if (!response.ok) throw new Error('Ödüller alınamadı.'); return response.json() as Promise<AdminReward[]> }
+export async function createAdminReward(request: Omit<AdminReward, 'id' | 'createdAtUtc' | 'isAvailable'>): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/rewards`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }); if (!response.ok) { const body = await response.json().catch(() => null) as { detail?: string } | null; throw new Error(body?.detail ?? 'Ödül oluşturulamadı.') } }
+export async function updateAdminReward(reward: AdminReward): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/rewards/${reward.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reward) }); if (!response.ok) throw new Error('Ödül güncellenemedi.') }
+export type AdminCoupon = { id: string; fulfillmentCode: string; reward: string; deliveryType: string; craftsman: string; phoneNumber: string; storedStatus: string; displayStatus: string; pointsSpent: number; createdAtUtc: string; expiresAtUtc: string | null; fulfilledAtUtc: string | null; dealer: string | null; dealerEmployee: string | null }
+export type AdminCouponResponse = { rows: AdminCoupon[]; summary: { active: number; expiring: number; expired: number; fulfilled: number; cancelled: number } }
+export async function getAdminCoupons(status?: string, search?: string): Promise<AdminCouponResponse> { const query = new URLSearchParams(); if (status) query.set('status', status); if (search) query.set('search', search); const response = await adminFetch(`${apiBaseUrl}/api/admin/coupons?${query}`); if (!response.ok) throw new Error('Kupon takibi yüklenemedi.'); return response.json() as Promise<AdminCouponResponse> }
+export type AdminProduct = { id: string; sku: string; name: string; basePoints: number; isActive: boolean; createdAtUtc: string; totalCodes: number; availableCodes: number; redeemedCodes: number; returnedCodes: number }
+export async function getAdminProducts(): Promise<AdminProduct[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/products`); if (!response.ok) throw new Error('Ürünler alınamadı.'); return response.json() as Promise<AdminProduct[]> }
+export async function setAdminProductActive(id: string, isActive: boolean): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/products/${id}/active`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive }) }); if (!response.ok) { const body = await response.json().catch(() => null) as { message?: string } | null; throw new Error(body?.message ?? 'Ürün durumu güncellenemedi.') } }
+export async function createAdminProduct(request: { sku: string; name: string; basePoints: number }): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/products`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }); if (!response.ok) { const body = await response.json().catch(() => null) as { message?: string; detail?: string } | null; throw new Error(body?.message ?? body?.detail ?? 'Ürün eklenemedi.') } }
+export async function generateAdminProductCodes(id: string, count: number): Promise<{ codes: string[]; warning: string }> { const response = await adminFetch(`${apiBaseUrl}/api/admin/products/${id}/generate-codes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ count }) }); const body = await response.json() as { codes: string[]; warning: string; detail?: string }; if (!response.ok) throw new Error(body.detail ?? 'Kodlar üretilemedi.'); return body }
+export type ProductCodeValidationResult = { total: number; valid: number; rejected: number; rejectedItems: Array<{ line: number; maskedCode: string; reason: string }> }
+export async function validateAdminProductCodes(id: string, codes: string[]): Promise<ProductCodeValidationResult> { const response = await adminFetch(`${apiBaseUrl}/api/admin/products/${id}/validate-codes`, { method: 'POST', body: JSON.stringify({ codes }) }); const body = await response.json() as ProductCodeValidationResult & { message?: string; detail?: string }; if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Kod dosyası doğrulanamadı.'); return body }
+export async function importAdminProductCodes(id: string, codes: string[]): Promise<{ imported: number; warning: string }> { const response = await adminFetch(`${apiBaseUrl}/api/admin/products/${id}/import-codes`, { method: 'POST', body: JSON.stringify({ codes }) }); const body = await response.json() as { imported: number; warning: string; message?: string; detail?: string }; if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Kodlar yüklenemedi.'); return body }
+export type LoyaltyRuleAudit = { id: string; silverThreshold: number; goldThreshold: number; pointsPerRewardTry: number; changeNote: string; createdAtUtc: string }
+export type LoyaltyRules = { silverThreshold: number; goldThreshold: number; pointsPerRewardTry: number; updatedAtUtc: string; history: LoyaltyRuleAudit[] }
+export async function getAdminLoyaltyRules(): Promise<LoyaltyRules> { const response = await adminFetch(`${apiBaseUrl}/api/admin/loyalty-rules`); if (!response.ok) throw new Error('Puan kuralları alınamadı.'); return response.json() as Promise<LoyaltyRules> }
+export async function updateAdminLoyaltyRules(request: { silverThreshold: number; goldThreshold: number; pointsPerRewardTry: number; changeNote: string }): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/loyalty-rules`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }); if (!response.ok) { const body = await response.json().catch(() => null) as { detail?: string } | null; throw new Error(body?.detail ?? 'Puan kuralları güncellenemedi.') } }
+export type AdminTransaction = { id: string; category: string; type: string; description: string; amount: number; craftsman: string; phoneNumber: string; referenceType: string; referenceValue: string; occurredAtUtc: string; dealerEmployee: string | null }
+export type AdminTransactionResponse = { rows: AdminTransaction[]; summary: { earnedPoints: number; spentPoints: number; reversedPoints: number; fulfilledCoupons: number } }
+export async function getAdminTransactions(type?: string): Promise<AdminTransactionResponse> { const query = type ? `?type=${encodeURIComponent(type)}` : ''; const response = await adminFetch(`${apiBaseUrl}/api/admin/transactions${query}`); if (!response.ok) throw new Error('İşlem geçmişi alınamadı.'); return response.json() as Promise<AdminTransactionResponse> }
+export type PointAdjustmentResult = { id: string; craftsman: string; amount: number; reason: string; actor: string; balance: number; pointDebt: number; createdAtUtc: string }
+export async function createAdminPointAdjustment(craftsmanId: string, amount: number, reason: string): Promise<PointAdjustmentResult> { const response = await adminFetch(`${apiBaseUrl}/api/admin/transactions/adjustments`, { method: 'POST', body: JSON.stringify({ craftsmanId, amount, reason }) }); const body = await response.json() as PointAdjustmentResult & { message?: string; detail?: string }; if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Puan düzeltmesi yapılamadı.'); return body }
+export type AdminLoyaltyReport = { from: string; to: string; summary: { earnedPoints: number; spentPoints: number; reversedPoints: number; uniqueCraftsmen: number; rewardRequests: number; fulfilledRewards: number }; daily: { date: string; earned: number; spent: number; reversed: number }[]; topCraftsmen: { name: string; phoneNumber: string; earnedPoints: number }[]; topRewards: { name: string; count: number; points: number }[] }
+export type ReportExportAudit = { id: string; reportType: string; actor: string; startsAtUtc: string; endsAtUtc: string; rowCount: number; createdAtUtc: string }
+export async function getAdminLoyaltyReport(from: string, to: string): Promise<AdminLoyaltyReport> { const response = await adminFetch(`${apiBaseUrl}/api/admin/reports/loyalty?from=${from}&to=${to}`); if (!response.ok) throw new Error('Rapor alınamadı.'); return response.json() as Promise<AdminLoyaltyReport> }
+export async function getReportExportAudits(): Promise<ReportExportAudit[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/reports/exports`); if (!response.ok) throw new Error('Dışa aktarma geçmişi alınamadı.'); return response.json() as Promise<ReportExportAudit[]> }
+export async function exportAdminLoyaltyReport(from: string, to: string): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/reports/loyalty/export?from=${from}&to=${to}`); if (!response.ok) throw new Error('CSV oluşturulamadı.'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `usta-kulubu-raporu-${to}.csv`; link.click(); URL.revokeObjectURL(url) }
+export type SupportResponseItem = { id: string; author: string; message: string; createdAtUtc: string }
+export type AdminSupportRequest = { id: string; category: string; subject: string; description: string; referenceValue: string | null; status: 'Open' | 'InProgress' | 'Resolved' | 'Closed'; priority: 'Low' | 'Normal' | 'High' | 'Urgent'; assignedTo: string | null; createdAtUtc: string; updatedAtUtc: string; resolvedAtUtc: string | null; craftsman: string; phoneNumber: string; responses: SupportResponseItem[] }
+export async function getAdminSupportRequests(status?: string): Promise<AdminSupportRequest[]> { const query = status ? `?status=${status}` : ''; const response = await adminFetch(`${apiBaseUrl}/api/admin/support-requests${query}`); if (!response.ok) throw new Error('Destek talepleri alınamadı.'); return response.json() as Promise<AdminSupportRequest[]> }
+export async function updateAdminSupportRequest(id: string, request: { status: string; priority: string; assignedTo: string | null }): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/support-requests/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }); if (!response.ok) throw new Error('Destek talebi güncellenemedi.') }
+export async function replyAdminSupportRequest(id: string, message: string): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/support-requests/${id}/responses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) }); if (!response.ok) throw new Error('Yanıt gönderilemedi.') }
+export type AdminNotificationAudience = { recipientCount: number; cities: string[] }
+export type AdminNotificationHistory = { id: string; title: string; message: string; recipientCount: number; readCount: number; createdAtUtc: string }
+export async function getAdminNotificationAudience(level?: string, city?: string): Promise<AdminNotificationAudience> { const query = new URLSearchParams(); if (level) query.set('level', level); if (city) query.set('city', city); const response = await adminFetch(`${apiBaseUrl}/api/admin/notifications/audience?${query}`); if (!response.ok) throw new Error('Hedef kitle hesaplanamadı.'); return response.json() as Promise<AdminNotificationAudience> }
+export async function getAdminNotificationHistory(): Promise<AdminNotificationHistory[]> { const response = await adminFetch(`${apiBaseUrl}/api/admin/notifications/history`); if (!response.ok) throw new Error('Bildirim geçmişi alınamadı.'); return response.json() as Promise<AdminNotificationHistory[]> }
+export async function sendAdminTargetedNotification(title: string, message: string, level?: string, city?: string): Promise<{ id: string; recipientCount: number }> { const response = await adminFetch(`${apiBaseUrl}/api/admin/notifications`, { method: 'POST', body: JSON.stringify({ title, message, level: level || null, city: city || null }) }); const body = await response.json() as { id: string; recipientCount: number; message?: string; detail?: string }; if (!response.ok) throw new Error(body.message ?? body.detail ?? 'Bildirim gönderilemedi.'); return body }
+export type AdminAuditEntry = { id: string; actor: string; action: string; entityType: string; entityId: string | null; details: string; correlationId: string | null; createdAtUtc: string }
+export type AdminAuditResponse = { rows: AdminAuditEntry[]; entityTypes: string[] }
+export async function getAdminAudit(entityType?: string): Promise<AdminAuditResponse> { const query = entityType ? `?entityType=${encodeURIComponent(entityType)}` : ''; const response = await adminFetch(`${apiBaseUrl}/api/admin/audit${query}`); if (!response.ok) throw new Error('Denetim kaydı yüklenemedi.'); return response.json() as Promise<AdminAuditResponse> }
+export type AdminOutboxItem = { id: string; type: string; status: 'Pending' | 'Delivered' | 'Failed'; attemptCount: number; correlationId: string | null; createdAtUtc: string; nextAttemptAtUtc: string; deliveredAtUtc: string | null; lastError: string | null }
+export type AdminOutboxResponse = { rows: AdminOutboxItem[]; summary: { pending: number; delivered: number; failed: number } }
+export async function getAdminOutbox(): Promise<AdminOutboxResponse> { const response = await adminFetch(`${apiBaseUrl}/api/admin/outbox`); if (!response.ok) throw new Error('Teslim kuyruğu yüklenemedi.'); return response.json() as Promise<AdminOutboxResponse> }
+export async function retryAdminOutbox(id: string): Promise<void> { const response = await adminFetch(`${apiBaseUrl}/api/admin/outbox/${id}/retry`, { method: 'POST' }); if (!response.ok) { const body = await response.json().catch(() => null) as { message?: string } | null; throw new Error(body?.message ?? 'Kayıt yeniden kuyruğa alınamadı.') } }
