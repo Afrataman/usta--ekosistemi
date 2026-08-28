@@ -357,7 +357,11 @@ function Rewards({ availablePoints, pointDebt, craftsmanId, onBalanceChanged }: 
   }, [filter, catalogVersion])
 
   async function confirmRedemption() {
-    if (!selectedReward || !craftsmanId) return
+    if (!selectedReward || !craftsmanId) { setRedemptionError('Ödül veya kullanıcı bilgisi bulunamadı.'); return }
+    if (!selectedReward.isAvailable) { setRedemptionError('Bu ödül artık stokta bulunmuyor.'); return }
+    if (pointDebt > 0) { setRedemptionError('Puan açığı varken ödül talebi oluşturulamaz.'); return }
+    if (availablePoints < selectedReward.pointCost) { setRedemptionError('Bu ödül için yeterli puanınız bulunmuyor.'); return }
+    if (!redemptionRequestId) { setRedemptionError('İşlem hazırlanamıyor. Lütfen ödülü yeniden seçin.'); return }
     setSubmitting(true)
     setRedemptionError('')
     try {
@@ -388,6 +392,7 @@ function Rewards({ availablePoints, pointDebt, craftsmanId, onBalanceChanged }: 
       {selectedReward && <div className="reward-dialog-backdrop"><section className="reward-dialog" role="dialog" aria-modal="true" aria-labelledby="reward-dialog-title">
         <button className="dialog-close" onClick={() => setSelectedReward(null)} type="button" aria-label="Kapat">×</button><div className="dialog-art">{rewardArt[selectedReward.imageKey] ?? '🎁'}</div>
         <h2 id="reward-dialog-title">{selectedReward.name}</h2><p>{selectedReward.description}</p><strong>{numberFormatter.format(selectedReward.pointCost)} puan kullanılacak</strong>
+        <small>{selectedReward.deliveryType === 'Digital' ? 'Dijital ödül: kod işlemin ardından anında gösterilir.' : 'Bayiden teslim: oluşan kodu bayi görevlisine gösterin.'}</small>
         {redemptionError && <span className="dialog-error">{redemptionError}</span>}<button className="dialog-confirm" onClick={confirmRedemption} disabled={submitting} type="button">{submitting ? 'İşlem yapılıyor…' : 'Onayla ve Ödülü Al'}</button><button className="dialog-cancel" onClick={() => setSelectedReward(null)} type="button">Vazgeç</button>
       </section></div>}
       {redemption && <section className="redemption-success"><span>✓</span><div><strong>Ödülün hazır!</strong><p>{redemption.reward}</p><code>{redemption.fulfillmentCode}</code><small>{redemption.deliveryType === 'Digital' ? 'Dijital kodunu yukarıda görebilirsin.' : 'Bu kodu bayide görevliye göster.'}</small></div><button onClick={() => setRedemption(null)} type="button">×</button></section>}
