@@ -979,8 +979,8 @@ function Login({ onAuthenticated }: { onAuthenticated: (result: { craftsmanId: s
 function ProfileSetup({ craftsmanId, onCompleted }: { craftsmanId: string; onCompleted: () => void }) {
   const [fullName, setFullName] = useState(''); const [city, setCity] = useState(''); const [privacy, setPrivacy] = useState(false); const [explicitConsent, setExplicitConsent] = useState(false); const [commercialConsent, setCommercialConsent] = useState(false); const [saving, setSaving] = useState(false); const [message, setMessage] = useState('')
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setSaving(true); setMessage('')
-    try { await updateCraftsmanProfile(craftsmanId, { fullName, city, campaignNotificationsEnabled: commercialConsent, smsNotificationsEnabled: commercialConsent, privacyNoticeAcknowledged: privacy, explicitConsent, commercialCommunicationConsent: commercialConsent, consentVersion: '2026-08-dev' }); onCompleted() }
+    event.preventDefault(); const normalizedName = fullName.trim().replace(/\s+/g, ' '); const normalizedCity = city.trim().replace(/\s+/g, ' '); if (normalizedName.length < 3 || normalizedName.length > 120) { setMessage('Ad soyad 3 ile 120 karakter arasında olmalıdır.'); return } if (normalizedCity.length > 80) { setMessage('Şehir en fazla 80 karakter olabilir.'); return } setSaving(true); setMessage('')
+    try { await updateCraftsmanProfile(craftsmanId, { fullName: normalizedName, city: normalizedCity, campaignNotificationsEnabled: commercialConsent, smsNotificationsEnabled: commercialConsent, privacyNoticeAcknowledged: privacy, explicitConsent, commercialCommunicationConsent: commercialConsent, consentVersion: '2026-08-dev' }); onCompleted() }
     catch (error) { setMessage(error instanceof Error ? error.message : 'Profil kaydedilemedi.') }
     finally { setSaving(false) }
   }
