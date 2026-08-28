@@ -1934,6 +1934,8 @@ function DealerSalePanel({ onSaved }: { onSaved: () => void }) {
             const found = await detector.detect(memberVideoRef.current).catch(() => [])
             if (found[0]?.rawValue) {
               setMembershipToken(found[0].rawValue.toUpperCase())
+              setVerifiedName('')
+              setResult(null)
               setCameraOpen(false)
               // Kodu okur okumaz direkt doğrulamaya geçebiliriz (opsiyonel ama iyi bir UX)
               setMessage('QR okundu, doğrulayabilirsiniz.')
@@ -1974,10 +1976,15 @@ function DealerSalePanel({ onSaved }: { onSaved: () => void }) {
 
   const save = async (event: FormEvent) => {
     event.preventDefault()
-    if (!totalAmount) return
+    const token = membershipToken.trim().toUpperCase()
+    const reference = saleReference.trim().toUpperCase()
+    const amount = Number(totalAmount)
+    if (!verifiedName || token.length < 8) { setMessage('Satış kaydetmeden önce usta üyelik kodunu doğrulayın.'); return }
+    if (reference.length < 3 || reference.length > 80) { setMessage('Satış referansı 3 ile 80 karakter arasında olmalıdır.'); return }
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000) { setMessage('Satış tutarı 0 ile 1.000.000 TL arasında olmalıdır.'); return }
     setBusy(true); setMessage(''); setResult(null)
     try {
-      const sale = await createDealerSale(membershipToken.trim().toUpperCase(), saleReference.trim().toUpperCase(), Number(totalAmount))
+      const sale = await createDealerSale(token, reference, amount)
       setResult(sale)
       setVerifiedName(''); setMembershipToken(''); setSaleReference(''); setTotalAmount('')
       onSaved()
